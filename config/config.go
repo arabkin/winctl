@@ -15,6 +15,8 @@ type Config struct {
 	Username    string `json:"username"`
 	PasswordB64 string `json:"password"`
 
+	SessionTimeoutMinutes int `json:"session_timeout_minutes"`
+
 	RestartMinMinutes int `json:"restart_min_minutes"`
 	RestartMaxMinutes int `json:"restart_max_minutes"`
 	LockMinMinutes    int `json:"lock_min_minutes"`
@@ -41,8 +43,9 @@ func defaults() *Config {
 	return &Config{
 		Port:              8443,
 		Username:          "admin",
-		PasswordB64:       base64.StdEncoding.EncodeToString([]byte(plain)),
-		RestartMinMinutes: 5,
+		PasswordB64:           base64.StdEncoding.EncodeToString([]byte(plain)),
+		SessionTimeoutMinutes: 30,
+		RestartMinMinutes:     5,
 		RestartMaxMinutes: 15,
 		LockMinMinutes:    5,
 		LockMaxMinutes:    15,

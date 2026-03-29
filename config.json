@@ -2,6 +2,7 @@
     "port": 8443,
     "username": "admin",
     "password": "Y2hhbmdlbWU=",
+    "session_timeout_minutes": 30,
     "restart_min_minutes": 5,
     "restart_max_minutes": 15,
     "lock_min_minutes": 5,

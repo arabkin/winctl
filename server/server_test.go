@@ -34,13 +34,29 @@ func authHeader() string {
 }
 
 func doRequest(handler http.Handler, method, path, auth string) *httptest.ResponseRecorder {
+	return doRequestWithCookie(handler, method, path, auth, nil)
+}
+
+func doRequestWithCookie(handler http.Handler, method, path, auth string, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, nil)
 	if auth != "" {
 		req.Header.Set("Authorization", auth)
 	}
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 	return w
+}
+
+func extractSessionCookie(w *httptest.ResponseRecorder) *http.Cookie {
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "winctl_session" {
+			return c
+		}
+	}
+	return nil
 }
 
 // --- Auth tests ---
@@ -79,6 +95,78 @@ func TestAuthAcceptsCorrectCredentials(t *testing.T) {
 	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", w.Code)
+	}
+}
+
+// --- Session tests ---
+
+func TestAuthSetsSessionCookie(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie to be set")
+	}
+	if cookie.Value == "" {
+		t.Error("session cookie should not be empty")
+	}
+}
+
+func TestSessionCookieAllowsAccessWithoutBasicAuth(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+
+	// First request with Basic Auth to get session cookie.
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie")
+	}
+
+	// Second request with only the cookie, no Basic Auth.
+	w2 := doRequestWithCookie(srv.Handler, "GET", "/api/status", "", []*http.Cookie{cookie})
+	if w2.Code != http.StatusOK {
+		t.Errorf("expected 200 with session cookie, got %d", w2.Code)
+	}
+}
+
+func TestExpiredSessionRequiresReauth(t *testing.T) {
+	// Use 0-minute timeout so sessions expire immediately.
+	cfg := config.NewForTestWithTimeout(8443, "admin", "testpass", 0)
+	st := state.New()
+	ctx := context.Background()
+	noopExec := scheduler.ExecFuncs{
+		Restart:    func() error { return nil },
+		LockScreen: func() error { return nil },
+	}
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
+	srv := New(cfg, st, sched)
+
+	// Get a session cookie.
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie")
+	}
+
+	// Session is already expired (0-minute timeout). Cookie-only request should fail.
+	time.Sleep(1 * time.Millisecond)
+	w2 := doRequestWithCookie(srv.Handler, "GET", "/api/status", "", []*http.Cookie{cookie})
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for expired session, got %d", w2.Code)
+	}
+}
+
+func TestInvalidSessionCookieRequiresAuth(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	fakeCookie := &http.Cookie{Name: "winctl_session", Value: "invalid-token"}
+	w := doRequestWithCookie(srv.Handler, "GET", "/api/status", "", []*http.Cookie{fakeCookie})
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 for invalid cookie, got %d", w.Code)
 	}
 }
 
