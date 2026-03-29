@@ -40,15 +40,16 @@ func Run() {
 		runFlags := flag.NewFlagSet("run", flag.ExitOnError)
 		dryRun := runFlags.Bool("dry-run", false, "simulate actions without executing them")
 		runFlags.BoolVar(dryRun, "d", false, "simulate actions without executing them (shorthand)")
+		configFile := runFlags.String("f", config.DefaultPath(), "path to config file")
 		runFlags.Parse(os.Args[2:])
-		runForeground(*dryRun)
+		runForeground(*dryRun, *configFile)
 	default:
 		printUsage()
 	}
 }
 
-func runForeground(dryRun bool) {
-	cfg, err := config.Load()
+func runForeground(dryRun bool, configFile string) {
+	cfg, err := config.Load(configFile)
 	if err != nil {
 		log.Printf("config warning: %v", err)
 	}
@@ -92,5 +93,6 @@ func printUsage() {
 	fmt.Println("  run        Run in foreground (debug mode)")
 	fmt.Println()
 	fmt.Println("Run flags:")
-	fmt.Println("  -d, --dry-run  Simulate actions without executing them")
+	fmt.Println("  -d, --dry-run    Simulate actions without executing them")
+	fmt.Println("  -f <path>        Path to config file (default: next to executable)")
 }

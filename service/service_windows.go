@@ -23,7 +23,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	const accepted = svc.AcceptStop | svc.AcceptShutdown
 	status <- svc.Status{State: svc.StartPending}
 
-	cfg, err := config.Load()
+	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
 		log.Printf("config load error: %v", err)
 	}

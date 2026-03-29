@@ -28,7 +28,7 @@ func (c *Config) Password() string {
 	return c.password
 }
 
-func configPath() string {
+func DefaultPath() string {
 	exe, err := os.Executable()
 	if err != nil {
 		return "config.json"
@@ -50,9 +50,7 @@ func defaults() *Config {
 	}
 }
 
-func Load() (*Config, error) {
-	path := configPath()
-
+func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// File doesn't exist — create it with defaults.
