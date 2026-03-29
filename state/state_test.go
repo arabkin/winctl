@@ -80,8 +80,7 @@ func TestSetRestartOnce(t *testing.T) {
 
 func TestSetLockOnce(t *testing.T) {
 	s := New()
-	at := time.Now().Add(60 * time.Second)
-	s.SetLockOnce(true, &at)
+	s.SetLockOnce(true, new(time.Now().Add(60*time.Second)))
 
 	st := s.Status()
 	if !st.LockPendingOnce {
