@@ -1,5 +1,4 @@
-winctl
-winctl.exe
+bin/
 config.json
 e2e/node_modules/
 e2e/test-results/

@@ -6,9 +6,10 @@ Windows machine control daemon — Go CLI with embedded web dashboard and REST A
 
 ```bash
 go mod tidy
-go build -o winctl .                                        # current platform
-GOOS=windows GOARCH=amd64 go build -o winctl.exe .          # Windows cross-compile
-./winctl run                                                 # foreground mode
+go build -o bin/winctl .                                     # current platform
+GOOS=windows GOARCH=amd64 go build -o bin/winctl.exe .       # Windows cross-compile
+./bin/winctl run                                              # foreground mode
+./bin/winctl run -d                                           # dry-run mode (no real OS commands)
 ```
 
 ## Test
@@ -28,7 +29,7 @@ cd e2e && npm install && npx playwright install chromium && npx playwright test
 - `service/` — Windows `svc.Handler` implementation with build-tag stubs for non-Windows
 - `server/` — HTTP server (`server.go`), Basic Auth middleware (`auth.go`), REST handlers (`handlers.go`)
 - `scheduler/` — timer goroutines for scheduled/one-shot restart and lock actions; accepts injectable `ExecFuncs` for testability
-- `executor/` — OS command wrappers (`shutdown /r /t 60`, `rundll32 LockWorkStation`)
+- `executor/` — OS command wrappers (`shutdown /r /t 60`, `rundll32 LockWorkStation`) plus `DryRestart()` / `DryLockScreen()` variants that log instead of executing
 - `config/` — JSON config loader with base64 password, auto-creates defaults on first run; `testing.go` exports `NewForTest()` helper
 - `state/` — thread-safe in-memory state with `sync.RWMutex`
 - `web/` — `go:embed` static files (HTML/CSS/JS dashboard)
@@ -46,6 +47,8 @@ cd e2e && npm install && npx playwright install chromium && npx playwright test
 - All API responses are `application/json` with a `"status"` field for action endpoints
 - State mutations are guarded by `sync.RWMutex`; `Status()` returns a copy (DTO)
 - Schedule operations are idempotent — double-start is a no-op, stop-when-idle is safe
+- `run` subcommand accepts `-d` / `--dry-run` flag via `flag.FlagSet`; when active, `scheduler.New()` wires dry-run executor functions that log `[DRY RUN]` instead of running OS commands
+- Dry-run is foreground-only; the Windows service always runs in real mode
 
 ## API Endpoints
 

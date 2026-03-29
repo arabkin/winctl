@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -36,13 +37,17 @@ func Run() {
 	case "stop":
 		stopService()
 	case "run":
-		runForeground()
+		runFlags := flag.NewFlagSet("run", flag.ExitOnError)
+		dryRun := runFlags.Bool("dry-run", false, "simulate actions without executing them")
+		runFlags.BoolVar(dryRun, "d", false, "simulate actions without executing them (shorthand)")
+		runFlags.Parse(os.Args[2:])
+		runForeground(*dryRun)
 	default:
 		printUsage()
 	}
 }
 
-func runForeground() {
+func runForeground(dryRun bool) {
 	cfg, err := config.Load()
 	if err != nil {
 		log.Printf("config warning: %v", err)
@@ -52,7 +57,7 @@ func runForeground() {
 	defer cancel()
 
 	st := state.New()
-	sched := scheduler.New(ctx, st)
+	sched := scheduler.New(ctx, st, dryRun)
 	srv := server.New(cfg, st, sched)
 
 	sigCh := make(chan os.Signal, 1)
@@ -64,7 +69,11 @@ func runForeground() {
 		cancel()
 	}()
 
-	log.Printf("WinCtl running on http://localhost:%d (user: %s)", cfg.Port, cfg.Username)
+	mode := ""
+	if dryRun {
+		mode = " [DRY RUN]"
+	}
+	log.Printf("WinCtl running on http://localhost:%d (user: %s)%s", cfg.Port, cfg.Username, mode)
 	if err := server.Run(srv, ctx); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
@@ -79,4 +88,7 @@ func printUsage() {
 	fmt.Println("  start      Start the Windows service")
 	fmt.Println("  stop       Stop the Windows service")
 	fmt.Println("  run        Run in foreground (debug mode)")
+	fmt.Println()
+	fmt.Println("Run flags:")
+	fmt.Println("  -d, --dry-run  Simulate actions without executing them")
 }

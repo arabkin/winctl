@@ -60,15 +60,17 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 
 **Idempotency:** Starting an already-running schedule is a no-op (checked via nil cancel function). Stopping an inactive schedule is safe. This prevents duplicate goroutines from careless API calls.
 
-### 2.5 Executor: injectable functions for testability
+### 2.5 Executor: injectable functions for testability and dry-run
 
-**Decision:** The scheduler accepts an `ExecFuncs` struct with `Restart` and `LockScreen` function fields.
+**Decision:** The scheduler accepts an `ExecFuncs` struct with `Restart` and `LockScreen` function fields. The executor package provides both real and dry-run implementations.
 
 **Rationale:**
 - Production code passes `executor.Restart` and `executor.LockScreen`
+- Dry-run mode passes `executor.DryRestart` and `executor.DryLockScreen`, which log `[DRY RUN] simulating ...` and return nil
 - Tests pass no-op or counting functions — no real `shutdown` or `rundll32` in CI
-- `New()` wires production defaults; `NewWithExec()` allows test injection
+- `New(ctx, state, dryRun)` selects real or dry-run executors; `NewWithExec()` allows full test injection
 - Avoids interface overhead for two simple functions
+- Dry-run is only available in foreground mode (`run -d` / `run --dry-run`); the Windows service always uses real executors
 
 ### 2.6 State: in-memory with mutex, no persistence
 
@@ -141,7 +143,7 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 2. Auth middleware validates credentials (constant-time compare)
 3. Handler dispatches to scheduler method (start/stop/reset)
 4. Scheduler updates state and manages timer goroutines
-5. Timer fires → executor runs OS command
+5. Timer fires → executor runs OS command (or logs simulation in dry-run mode)
 6. Browser polls `/api/status` every 2s → handler reads state → returns JSON
 
 **Service lifecycle:**
@@ -187,7 +189,7 @@ Run against a live server instance. Cover:
 | File | Purpose |
 |------|---------|
 | `main.go` | Entry point → `cmd.Run()` |
-| `cmd/root.go` | CLI dispatch, foreground runner |
+| `cmd/root.go` | CLI dispatch, foreground runner, `-d`/`--dry-run` flag parsing |
 | `cmd/service_windows.go` | SCM install/uninstall/start/stop |
 | `cmd/service_other.go` | Stub for non-Windows |
 | `service/service_windows.go` | `svc.Handler` implementation |
@@ -198,7 +200,7 @@ Run against a live server instance. Cover:
 | `server/server_test.go` | API + auth tests |
 | `scheduler/scheduler.go` | Schedule/one-shot timer management |
 | `scheduler/scheduler_test.go` | Scheduler tests with mock executors |
-| `executor/executor.go` | `shutdown` and `rundll32` wrappers |
+| `executor/executor.go` | `shutdown` and `rundll32` wrappers + dry-run variants |
 | `config/config.go` | Config loader with base64 password |
 | `config/config_test.go` | Config tests |
 | `config/testing.go` | `NewForTest()` helper |

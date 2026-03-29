@@ -32,7 +32,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	defer cancel()
 
 	st := state.New()
-	sched := scheduler.New(ctx, st)
+	sched := scheduler.New(ctx, st, false)
 	srv := server.New(cfg, st, sched)
 
 	go func() {

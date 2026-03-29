@@ -14,6 +14,7 @@ The service runs silently in the background (no system tray icon) and is only vi
 - **Auto-creates config** on first run with sensible defaults
 - **Web dashboard** with live status polling (2s interval)
 - **REST API** for programmatic control
+- **Dry-run mode** (`-d` / `--dry-run`) — simulates all actions without executing them
 
 ## Prerequisites
 
@@ -31,10 +32,10 @@ cd winctl
 go mod tidy
 
 # Build for current platform (macOS/Linux — foreground mode only)
-go build -o winctl .
+go build -o bin/winctl .
 
 # Cross-compile for Windows
-GOOS=windows GOARCH=amd64 go build -o winctl.exe .
+GOOS=windows GOARCH=amd64 go build -o bin/winctl.exe .
 ```
 
 ## Configuration
@@ -68,11 +69,20 @@ The config file is written with `0600` permissions (owner read/write only).
 ### Foreground mode (development / any OS)
 
 ```bash
-./winctl run
+./bin/winctl run                # normal mode
+./bin/winctl run -d             # dry-run mode (simulates actions)
+./bin/winctl run --dry-run      # same as -d
 ```
 
 Opens the HTTP server on the configured port. Stop with `Ctrl+C`.
 Visit `http://localhost:8443` and enter your credentials when prompted.
+
+In dry-run mode, all restart and lock actions are simulated — the app logs what it would do but does not execute any OS commands:
+
+```
+[DRY RUN] simulating restart (shutdown /r /t 60)
+[DRY RUN] simulating screen lock (rundll32 LockWorkStation)
+```
 
 ### Windows service
 
@@ -103,6 +113,14 @@ sc config WinCtlSvc obj= ".\yourusername" password= "yourpassword"
 ```
 
 Restart the service after changing the account.
+
+### Dry-run mode for E2E testing
+
+Dry-run is useful when running E2E or Playwright tests — the server behaves normally (schedules fire, state updates) but no real restarts or screen locks occur:
+
+```bash
+./bin/winctl run -d    # safe for testing
+```
 
 ## Web Dashboard
 

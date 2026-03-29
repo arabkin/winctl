@@ -29,11 +29,18 @@ type Scheduler struct {
 	lockOnceCancel        context.CancelFunc
 }
 
-func New(ctx context.Context, st *state.State) *Scheduler {
-	return NewWithExec(ctx, st, ExecFuncs{
+func New(ctx context.Context, st *state.State, dryRun bool) *Scheduler {
+	exec := ExecFuncs{
 		Restart:    executor.Restart,
 		LockScreen: executor.LockScreen,
-	})
+	}
+	if dryRun {
+		exec = ExecFuncs{
+			Restart:    executor.DryRestart,
+			LockScreen: executor.DryLockScreen,
+		}
+	}
+	return NewWithExec(ctx, st, exec)
 }
 
 func NewWithExec(ctx context.Context, st *state.State, exec ExecFuncs) *Scheduler {
