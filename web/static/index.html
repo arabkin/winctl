@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WinCtl Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>WinCtl Dashboard</h1>
+            <span id="connection" class="badge badge-ok">connected</span>
+        </header>
+
+        <section class="card">
+            <h2>Restart</h2>
+            <div class="status-row">
+                <span class="label">Schedule:</span>
+                <span id="restart-schedule-status" class="value">Idle</span>
+            </div>
+            <div class="status-row">
+                <span class="label">One-shot:</span>
+                <span id="restart-once-status" class="value">None</span>
+            </div>
+            <div class="actions">
+                <button onclick="api('POST','/api/restart/once')">Restart Now (60s delay)</button>
+                <button onclick="api('POST','/api/restart/schedule')" class="btn-on">Schedule On</button>
+                <button onclick="api('DELETE','/api/restart/schedule')" class="btn-off">Schedule Off</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Screen Lock</h2>
+            <div class="status-row">
+                <span class="label">Schedule:</span>
+                <span id="lock-schedule-status" class="value">Idle</span>
+            </div>
+            <div class="status-row">
+                <span class="label">One-shot:</span>
+                <span id="lock-once-status" class="value">None</span>
+            </div>
+            <div class="actions">
+                <button onclick="api('POST','/api/lock/once')">Lock Now (60s delay)</button>
+                <button onclick="api('POST','/api/lock/schedule')" class="btn-on">Schedule On</button>
+                <button onclick="api('DELETE','/api/lock/schedule')" class="btn-off">Schedule Off</button>
+            </div>
+        </section>
+
+        <section class="card card-global">
+            <h2>Global</h2>
+            <div class="actions">
+                <button onclick="api('POST','/api/reset')" class="btn-reset">Reset All</button>
+            </div>
+        </section>
+    </div>
+    <script src="/app.js"></script>
+</body>
+</html>

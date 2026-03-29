@@ -1,0 +1,68 @@
+# WinCtl
+
+Windows machine control daemon — Go CLI with embedded web dashboard and REST API.
+
+## Build & Run
+
+```bash
+go mod tidy
+go build -o winctl .                                        # current platform
+GOOS=windows GOARCH=amd64 go build -o winctl.exe .          # Windows cross-compile
+./winctl run                                                 # foreground mode
+```
+
+## Test
+
+```bash
+# Go tests (33 tests across config, state, scheduler, server packages)
+go test ./... -v
+
+# Playwright E2E (requires server running on localhost:8443)
+cd e2e && npm install && npx playwright install chromium && npx playwright test
+```
+
+## Project Structure
+
+- `main.go` — entry point, delegates to `cmd.Run()`
+- `cmd/` — CLI subcommands (install, uninstall, start, stop, run) with `//go:build windows` and `//go:build !windows` variants
+- `service/` — Windows `svc.Handler` implementation with build-tag stubs for non-Windows
+- `server/` — HTTP server (`server.go`), Basic Auth middleware (`auth.go`), REST handlers (`handlers.go`)
+- `scheduler/` — timer goroutines for scheduled/one-shot restart and lock actions; accepts injectable `ExecFuncs` for testability
+- `executor/` — OS command wrappers (`shutdown /r /t 60`, `rundll32 LockWorkStation`)
+- `config/` — JSON config loader with base64 password, auto-creates defaults on first run; `testing.go` exports `NewForTest()` helper
+- `state/` — thread-safe in-memory state with `sync.RWMutex`
+- `web/` — `go:embed` static files (HTML/CSS/JS dashboard)
+- `e2e/` — Playwright test suite
+
+## Code Conventions
+
+- **Go stdlib only** plus `golang.org/x/sys` for Windows service integration — no frameworks
+- **Build tags**: Windows-specific code in `*_windows.go`, stubs in `*_other.go`
+- HTTP routing uses `http.ServeMux` with `HandleFunc`; method dispatch inside handlers
+- Auth uses `crypto/subtle.ConstantTimeCompare` — no timing side-channels
+- Scheduler is testable via `NewWithExec(ctx, state, ExecFuncs)` — pass mock functions in tests
+- Config password is stored as base64 in `config.json`, decoded at load time
+- Config resolves path relative to `os.Executable()`, not working directory (important for Windows services)
+- All API responses are `application/json` with a `"status"` field for action endpoints
+- State mutations are guarded by `sync.RWMutex`; `Status()` returns a copy (DTO)
+- Schedule operations are idempotent — double-start is a no-op, stop-when-idle is safe
+
+## API Endpoints
+
+All require Basic Auth. UI at `/`.
+
+| Method | Path | Action |
+|--------|------|--------|
+| GET | `/api/status` | Current state |
+| POST | `/api/restart/once` | One-shot restart (60s) |
+| POST/DELETE | `/api/restart/schedule` | Toggle recurring restart |
+| POST | `/api/lock/once` | One-shot lock (60s) |
+| POST/DELETE | `/api/lock/schedule` | Toggle recurring lock |
+| POST | `/api/reset` | Cancel everything |
+
+## Known Constraints
+
+- Screen lock (`rundll32 LockWorkStation`) requires service to run under a user account, not SYSTEM
+- `shutdown /r /t 60` works from any session including SYSTEM
+- Config is re-read only at startup — changes require service restart
+- State is in-memory only — schedules do not persist across service restarts
