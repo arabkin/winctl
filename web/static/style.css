@@ -44,6 +44,7 @@ h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #a0c4ff; }
     margin-bottom: 1rem;
 }
 
+.card-config { border-color: #1a5276; }
 .card-global { border-color: #533483; }
 
 .status-row {
@@ -82,5 +83,7 @@ button:active { transform: scale(0.97); }
 .btn-off:hover { background: #8a3a3a; }
 .btn-reset { background: #533483; width: 100%; }
 .btn-reset:hover { background: #6a44a0; }
+.btn-reload { background: #1a5276; width: 100%; }
+.btn-reload:hover { background: #21618c; }
 .btn-logout { padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #6a2d2d; border-radius: 12px; }
 .btn-logout:hover { background: #8a3a3a; }

@@ -26,6 +26,7 @@ func New(cfg *config.Config, configPath string, st *state.State, sched *schedule
 	mux.HandleFunc("/api/lock/schedule", h.lockSchedule)
 	mux.HandleFunc("/api/reset", h.reset)
 	mux.HandleFunc("/api/logout", h.logout)
+	mux.HandleFunc("/api/config", h.configGet)
 	mux.HandleFunc("/api/config/reload", h.configReload)
 
 	staticFS, err := fs.Sub(web.StaticFS, "static")

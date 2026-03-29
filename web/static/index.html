@@ -51,6 +51,33 @@
             </div>
         </section>
 
+        <section class="card card-config">
+            <h2>Configuration</h2>
+            <div class="status-row">
+                <span class="label">Port:</span>
+                <span id="cfg-port" class="value">-</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Username:</span>
+                <span id="cfg-username" class="value">-</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Session timeout:</span>
+                <span id="cfg-session-timeout" class="value">-</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Restart interval:</span>
+                <span id="cfg-restart-interval" class="value">-</span>
+            </div>
+            <div class="status-row">
+                <span class="label">Lock interval:</span>
+                <span id="cfg-lock-interval" class="value">-</span>
+            </div>
+            <div class="actions">
+                <button onclick="reloadConfig()" class="btn-reload">Reload Configuration</button>
+            </div>
+        </section>
+
         <section class="card card-global">
             <h2>Global</h2>
             <div class="actions">

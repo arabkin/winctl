@@ -111,6 +111,23 @@ func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "logged out"})
 }
 
+func (h *handlers) configGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cfg := h.config.get()
+	writeJSON(w, map[string]any{
+		"port":                   cfg.Port,
+		"username":               cfg.Username,
+		"session_timeout_minutes": cfg.SessionTimeoutMinutes,
+		"restart_min_minutes":    cfg.RestartMinMinutes,
+		"restart_max_minutes":    cfg.RestartMaxMinutes,
+		"lock_min_minutes":       cfg.LockMinMinutes,
+		"lock_max_minutes":       cfg.LockMaxMinutes,
+	})
+}
+
 func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

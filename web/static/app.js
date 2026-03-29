@@ -12,6 +12,33 @@ function api(method, path) {
         .catch(err => console.error(err));
 }
 
+function fetchConfig() {
+    fetch("/api/config")
+        .then(r => {
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+        })
+        .then(data => {
+            document.getElementById("cfg-port").textContent = data.port;
+            document.getElementById("cfg-username").textContent = data.username;
+            document.getElementById("cfg-session-timeout").textContent = data.session_timeout_minutes + " min";
+            document.getElementById("cfg-restart-interval").textContent = data.restart_min_minutes + " - " + data.restart_max_minutes + " min";
+            document.getElementById("cfg-lock-interval").textContent = data.lock_min_minutes + " - " + data.lock_max_minutes + " min";
+        })
+        .catch(err => console.error(err));
+}
+
+function reloadConfig() {
+    fetch("/api/config/reload", { method: "POST" })
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return; }
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+        })
+        .then(() => fetchConfig())
+        .catch(err => console.error(err));
+}
+
 function logout() {
     fetch("/api/logout", { method: "POST" })
         .then(() => { window.location.reload(); })
@@ -97,4 +124,5 @@ function poll() {
 }
 
 poll();
+fetchConfig();
 setInterval(poll, 2000);

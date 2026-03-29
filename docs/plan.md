@@ -34,17 +34,18 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 
 **Trade-off:** Screen lock (`LockWorkStation`) only works when the service runs under an interactive user session. Documented as a configuration step (`sc config WinCtlSvc obj=`).
 
-### 2.3 Authentication: HTTP Basic Auth with base64 config
+### 2.3 Authentication: Session-based auth with Basic Auth login
 
-**Decision:** Standard HTTP Basic Auth with `crypto/subtle.ConstantTimeCompare`.
+**Decision:** HTTP Basic Auth for initial login, with `crypto/subtle.ConstantTimeCompare`. Successful auth creates a session cookie; subsequent requests use the cookie without re-sending credentials.
 
 **Rationale:**
-- Browser-native — no custom login page needed; the browser prompts automatically on 401
+- Browser-native — the browser prompts automatically on 401
 - Timing-safe comparison prevents credential guessing via response time analysis
+- Session cookies avoid sending credentials on every request
+- Logout support via session invalidation + logged-out cookie to force browser to forget cached Basic Auth credentials
 - Base64-encoded password in config prevents casual shoulder-surfing but is not encryption — this is intentional for a local-network tool
 
 **Not chosen:**
-- Token/session auth: unnecessary complexity for single-user local control
 - TLS client certificates: correct but operationally heavy for this use case
 - OAuth: overkill
 
@@ -55,7 +56,7 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 **Rationale:**
 - Simple, predictable concurrency model — one goroutine per active schedule
 - `context.Cancel` provides clean shutdown without leaked goroutines
-- `time.After` in a select loop allows cancellation mid-wait
+- `time.NewTimer` in a select loop allows cancellation mid-wait with proper cleanup via `timer.Stop()`
 - Random interval is re-rolled each cycle, not fixed at enable time
 
 **Idempotency:** Starting an already-running schedule is a no-op (checked via nil cancel function). Stopping an inactive schedule is safe. This prevents duplicate goroutines from careless API calls.
@@ -79,7 +80,7 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 **Rationale:**
 - Schedules are transient — if the service restarts, starting clean is safer than resuming a stale schedule
 - No database dependency, no file corruption risk
-- `Status()` returns a copy (DTO struct), not a reference — safe for concurrent JSON serialization
+- `Status()` returns a deep copy (DTO struct with cloned `*time.Time` values), not a reference — safe for concurrent JSON serialization
 
 **Future option:** Adding JSON persistence would be trivial — `Save()`/`LoadState()` methods are a natural extension if needed.
 
@@ -92,6 +93,8 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 - Auto-creation means zero setup for the default case
 - File permissions set to `0600` (owner-only) for security
 - Falls back to hardcoded defaults if config is missing or malformed — the service always starts
+- Config validation rejects invalid port, empty credentials, and misconfigured interval ranges at load time
+- Hot reload via `POST /api/config/reload` updates credentials and scheduler intervals without restart; port changes require restart
 
 ### 2.8 Web UI: plain HTML/CSS/JS, no build step
 
@@ -139,12 +142,12 @@ A Windows machine needs to be controlled remotely via a web interface — specif
 ```
 
 **Request flow:**
-1. Browser sends request with Basic Auth header
-2. Auth middleware validates credentials (constant-time compare)
+1. Browser sends request with Basic Auth header (first request) or session cookie (subsequent)
+2. Auth middleware validates session cookie or credentials (constant-time compare), creates session on success
 3. Handler dispatches to scheduler method (start/stop/reset)
 4. Scheduler updates state and manages timer goroutines
 5. Timer fires → executor runs OS command (or logs simulation in dry-run mode)
-6. Browser polls `/api/status` every 2s → handler reads state → returns JSON
+6. Browser polls `/api/status` every 2s → handler reads state → returns JSON (includes `dry_run` flag)
 
 **Service lifecycle:**
 1. Windows SCM calls `svc.Run()` → `Execute()` method
@@ -164,12 +167,12 @@ Method enforcement is explicit: wrong methods return `405 Method Not Allowed`. T
 
 ## 5. Testing Strategy
 
-### Go unit/integration tests (33 tests)
+### Go unit/integration tests (64 tests)
 
-- **config**: save/load roundtrip, base64 encoding, file permissions, error handling for invalid JSON and invalid base64
-- **state**: all setters/getters, reset, concurrent access stress test (100 goroutines)
-- **scheduler**: start/stop for each behavior, idempotency (double-start, stop-when-idle), `ResetAll`, `Stop()` cancels all goroutines, random interval bounds, mock executor wiring
-- **server**: auth reject (no creds, wrong user, wrong pass), auth accept, all 8 endpoints with correct methods, method rejection (405), JSON response shape validation, static file serving, idempotent schedule toggle, disable-when-inactive is safe
+- **config** (12): save/load roundtrip, base64 encoding, file permissions, error handling for invalid JSON and invalid base64, port/username/password/interval validation
+- **state** (7): all setters/getters, reset, concurrent access stress test (100 goroutines)
+- **scheduler** (14): start/stop for each behavior, idempotency (double-start, stop-when-idle), `ResetAll`, `Stop()` cancels all goroutines, random interval bounds, mock executor wiring
+- **server** (31): auth reject (no creds, wrong user, wrong pass), auth accept, session cookies, session expiry, logout, all endpoints with correct methods, method rejection (405), JSON response shape validation, static file serving, idempotent schedule toggle, disable-when-inactive is safe, concurrent session creation
 
 Tests use `httptest.NewRecorder` for API tests and `scheduler.NewWithExec` with no-op functions to avoid executing real OS commands.
 
@@ -195,8 +198,8 @@ Run against a live server instance. Cover:
 | `service/service_windows.go` | `svc.Handler` implementation |
 | `service/service_other.go` | Stub for non-Windows |
 | `server/server.go` | HTTP server, mux, static file serving |
-| `server/auth.go` | Basic Auth middleware |
-| `server/handlers.go` | REST endpoint handlers |
+| `server/auth.go` | Session-based auth middleware with Basic Auth login, config holder |
+| `server/handlers.go` | REST endpoint handlers (status, schedules, config, logout) |
 | `server/server_test.go` | API + auth tests |
 | `scheduler/scheduler.go` | Schedule/one-shot timer management |
 | `scheduler/scheduler_test.go` | Scheduler tests with mock executors |

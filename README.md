@@ -6,15 +6,16 @@ The service runs silently in the background (no system tray icon) and is only vi
 
 ## Features
 
-- **Restart control** — trigger a one-shot restart (60s delay) or enable recurring restarts at random 1–10 minute intervals
+- **Restart control** — trigger a one-shot restart (60s delay) or enable recurring restarts at configurable random intervals
 - **Screen lock control** — same options as restart: one-shot with 60s delay or random recurring schedule
 - **Disable/enable** each behavior independently
 - **Reset all** — cancel everything and return the machine to normal
-- **Basic HTTP auth** with base64-encoded password in config
-- **Auto-creates config** on first run with sensible defaults
-- **Web dashboard** with live status polling (2s interval)
+- **Session-based auth** with Basic Auth login, session cookies, and logout support
+- **Auto-creates config** on first run with sensible defaults; validated on load
+- **Hot config reload** — reload credentials and intervals via API without restarting
+- **Web dashboard** with live status polling (2s interval), mode indicator (dry-run / real), and config viewer
 - **REST API** for programmatic control
-- **Dry-run mode** (`-d` / `--dry-run`) — simulates all actions without executing them
+- **Dry-run mode** (`-d` / `--dry-run`) — simulates all actions without executing them; visible in dashboard
 
 ## Prerequisites
 
@@ -46,9 +47,25 @@ On first run, WinCtl creates a `config.json` next to the executable with these d
 {
     "port": 8443,
     "username": "admin",
-    "password": "Y2hhbmdlbWU="
+    "password": "Y2hhbmdlbWU=",
+    "session_timeout_minutes": 30,
+    "restart_min_minutes": 5,
+    "restart_max_minutes": 15,
+    "lock_min_minutes": 5,
+    "lock_max_minutes": 15
 }
 ```
+
+| Field | Description | Validation |
+|-------|-------------|------------|
+| `port` | HTTP listen port | 1–65535 |
+| `username` | Basic Auth username | Non-empty |
+| `password` | Base64-encoded password | Non-empty after decode |
+| `session_timeout_minutes` | Session cookie lifetime | Defaults to 30 if <= 0 |
+| `restart_min_minutes` | Minimum restart interval | >= 1 |
+| `restart_max_minutes` | Maximum restart interval | >= min |
+| `lock_min_minutes` | Minimum lock interval | >= 1 |
+| `lock_max_minutes` | Maximum lock interval | >= min |
 
 The `password` field is base64-encoded. The default decodes to `changeme`.
 
@@ -63,6 +80,8 @@ echo -n "mysecretpassword" | base64
 ```
 
 The config file is written with `0600` permissions (owner read/write only).
+
+**Hot reload:** Config can be reloaded without restarting via `POST /api/config/reload` or the dashboard's "Reload Configuration" button. This updates credentials and scheduler intervals. Port changes still require a restart.
 
 ## Usage
 
@@ -126,12 +145,13 @@ Dry-run is useful when running E2E or Playwright tests — the server behaves no
 
 Navigate to `http://localhost:8443` (or your configured port). The browser prompts for Basic Auth credentials.
 
-The dashboard has three sections:
+The dashboard shows a mode badge (Real / Dry Run), connection status, and a Logout button in the header.
 
 | Section | Controls |
 |---------|----------|
 | **Restart** | Restart Now (60s delay), Schedule On/Off |
 | **Screen Lock** | Lock Now (60s delay), Schedule On/Off |
+| **Configuration** | View current config values, Reload Configuration |
 | **Global** | Reset All |
 
 Status updates automatically every 2 seconds, showing active schedules with countdown timers.
@@ -144,12 +164,15 @@ All endpoints require Basic Auth. Responses are JSON.
 |--------|------|-------------|
 | `GET` | `/api/status` | Current state of all schedules and pending actions |
 | `POST` | `/api/restart/once` | Trigger one-shot restart with 60s delay |
-| `POST` | `/api/restart/schedule` | Enable recurring restart (random 1–10 min intervals) |
+| `POST` | `/api/restart/schedule` | Enable recurring restart (random configurable intervals) |
 | `DELETE` | `/api/restart/schedule` | Disable recurring restart |
 | `POST` | `/api/lock/once` | Trigger one-shot screen lock with 60s delay |
-| `POST` | `/api/lock/schedule` | Enable recurring lock (random 1–10 min intervals) |
+| `POST` | `/api/lock/schedule` | Enable recurring lock (random configurable intervals) |
 | `DELETE` | `/api/lock/schedule` | Disable recurring lock |
 | `POST` | `/api/reset` | Cancel all schedules and pending actions |
+| `GET` | `/api/config` | Current configuration (excludes password) |
+| `POST` | `/api/config/reload` | Reload config from disk (updates auth + intervals) |
+| `POST` | `/api/logout` | Invalidate session and force re-authentication |
 
 ### Example
 
@@ -168,6 +191,7 @@ curl -u admin:changeme -X POST http://localhost:8443/api/reset
 
 ```json
 {
+    "dry_run": false,
     "restart_schedule_active": true,
     "restart_next_at": "2026-03-29T14:32:00Z",
     "restart_pending_once": false,
@@ -179,6 +203,20 @@ curl -u admin:changeme -X POST http://localhost:8443/api/reset
 }
 ```
 
+### Config response
+
+```json
+{
+    "port": 8443,
+    "username": "admin",
+    "session_timeout_minutes": 30,
+    "restart_min_minutes": 5,
+    "restart_max_minutes": 15,
+    "lock_min_minutes": 5,
+    "lock_max_minutes": 15
+}
+```
+
 ## Testing
 
 ### Go unit/integration tests
@@ -187,14 +225,14 @@ curl -u admin:changeme -X POST http://localhost:8443/api/reset
 go test ./... -v
 ```
 
-Runs 33 tests across 4 packages:
+Runs 64 tests across 4 packages:
 
 | Package | Tests | What's covered |
 |---------|-------|----------------|
-| `config` | 5 | Defaults, save/load, file permissions, invalid JSON, invalid base64 |
+| `config` | 12 | Defaults, save/load, file permissions, invalid JSON, invalid base64, port/username/interval validation |
 | `state` | 7 | State operations, reset, concurrent access |
-| `scheduler` | 12 | Start/stop schedules, one-shots, idempotency, reset, cancellation, random interval range |
-| `server` | 19 | Auth (accept/reject), all API endpoints, method validation, JSON shape, static files |
+| `scheduler` | 14 | Start/stop schedules, one-shots, idempotency, reset, cancellation, random interval range |
+| `server` | 31 | Auth (accept/reject), sessions, logout, all API endpoints, method validation, JSON shape, static files |
 
 The scheduler tests use mock executor functions — no real `shutdown` or `rundll32` commands are executed.
 
