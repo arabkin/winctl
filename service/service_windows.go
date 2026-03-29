@@ -25,7 +25,8 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 
 	cfg, err := config.Load(config.DefaultPath())
 	if err != nil {
-		log.Printf("config load error: %v", err)
+		log.Printf("config load error: %v — service cannot start", err)
+		return false, 1
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

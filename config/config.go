@@ -3,6 +3,8 @@ package config
 import (
 	"encoding/base64"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -33,6 +35,7 @@ func (c *Config) Password() string {
 func DefaultPath() string {
 	exe, err := os.Executable()
 	if err != nil {
+		log.Printf("warning: could not determine executable path, using relative config.json: %v", err)
 		return "config.json"
 	}
 	return filepath.Join(filepath.Dir(exe), "config.json")
@@ -41,22 +44,25 @@ func DefaultPath() string {
 func defaults() *Config {
 	plain := "changeme"
 	return &Config{
-		Port:              8443,
-		Username:          "admin",
+		Port:                  8443,
+		Username:              "admin",
 		PasswordB64:           base64.StdEncoding.EncodeToString([]byte(plain)),
 		SessionTimeoutMinutes: 30,
 		RestartMinMinutes:     5,
-		RestartMaxMinutes: 15,
-		LockMinMinutes:    5,
-		LockMaxMinutes:    15,
-		password:          plain,
+		RestartMaxMinutes:     15,
+		LockMinMinutes:        5,
+		LockMaxMinutes:        15,
+		password:              plain,
 	}
 }
 
 func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		// File doesn't exist — create it with defaults.
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, fmt.Errorf("failed to read config %s: %w", path, err)
+		}
+		// File doesn't exist — first run, create it with defaults.
 		cfg := defaults()
 		if writeErr := save(cfg, path); writeErr != nil {
 			log.Printf("warning: could not write default config to %s: %v", path, writeErr)
@@ -68,17 +74,21 @@ func Load(path string) (*Config, error) {
 
 	cfg := &Config{}
 	if err := json.Unmarshal(data, cfg); err != nil {
-		log.Printf("warning: invalid config, using defaults: %v", err)
-		return defaults(), nil
+		return nil, fmt.Errorf("invalid config file %s: %w", path, err)
 	}
 
 	// Decode the base64 password.
 	decoded, err := base64.StdEncoding.DecodeString(cfg.PasswordB64)
 	if err != nil {
-		log.Printf("warning: invalid base64 password in config, using defaults")
-		return defaults(), nil
+		return nil, fmt.Errorf("invalid base64 password in config %s: %w", path, err)
 	}
 	cfg.password = string(decoded)
+
+	// Validate session timeout.
+	if cfg.SessionTimeoutMinutes <= 0 {
+		log.Printf("warning: session_timeout_minutes is %d, defaulting to 30", cfg.SessionTimeoutMinutes)
+		cfg.SessionTimeoutMinutes = 30
+	}
 
 	return cfg, nil
 }

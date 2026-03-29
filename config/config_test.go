@@ -92,12 +92,9 @@ func TestLoadInvalidJSON(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 	os.WriteFile(path, []byte("{invalid json"), 0600)
 
-	// Since Load() uses configPath() which is based on os.Executable(),
-	// we test the parsing logic directly.
-	var cfg Config
-	err := json.Unmarshal([]byte("{invalid json"), &cfg)
+	_, err := Load(path)
 	if err == nil {
-		t.Error("expected JSON parse error for invalid input")
+		t.Error("expected error for invalid JSON config")
 	}
 }
 
@@ -105,14 +102,63 @@ func TestLoadInvalidBase64Password(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	data := `{"port": 8443, "username": "admin", "password": "not-valid-base64!!!"}`
+	data := `{"port": 8443, "username": "admin", "password": "not-valid-base64!!!", "session_timeout_minutes": 30}`
 	os.WriteFile(path, []byte(data), 0600)
 
-	var cfg Config
-	json.Unmarshal([]byte(data), &cfg)
-
-	_, err := base64.StdEncoding.DecodeString(cfg.PasswordB64)
+	_, err := Load(path)
 	if err == nil {
-		t.Error("expected base64 decode error for invalid password")
+		t.Error("expected error for invalid base64 password")
+	}
+}
+
+func TestLoadCreatesDefaultOnMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("expected no error for missing file, got: %v", err)
+	}
+	if cfg.Port != 8443 {
+		t.Errorf("expected default port 8443, got %d", cfg.Port)
+	}
+	if cfg.SessionTimeoutMinutes != 30 {
+		t.Errorf("expected default session timeout 30, got %d", cfg.SessionTimeoutMinutes)
+	}
+	// File should have been created.
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("expected default config file to be created: %v", err)
+	}
+}
+
+func TestLoadValidatesSessionTimeout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 0}`
+	os.WriteFile(path, []byte(data), 0600)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SessionTimeoutMinutes != 30 {
+		t.Errorf("expected session timeout to default to 30 for zero value, got %d", cfg.SessionTimeoutMinutes)
+	}
+}
+
+func TestLoadValidatesNegativeSessionTimeout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+
+	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": -5}`
+	os.WriteFile(path, []byte(data), 0600)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.SessionTimeoutMinutes != 30 {
+		t.Errorf("expected session timeout to default to 30 for negative value, got %d", cfg.SessionTimeoutMinutes)
 	}
 }

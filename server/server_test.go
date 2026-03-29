@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 	"winctl/config"
@@ -27,6 +28,21 @@ func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Sched
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
 	srv := New(cfg, st, sched)
 	return srv, st, sched
+}
+
+func setupTestServerWithTimeout(t *testing.T, timeoutMinutes int) *http.Server {
+	t.Helper()
+	cfg := config.NewForTestWithTimeout(8443, "admin", "testpass", timeoutMinutes)
+	st := state.New()
+	ctx := context.Background()
+	noopExec := scheduler.ExecFuncs{
+		Restart:    func() error { return nil },
+		LockScreen: func() error { return nil },
+	}
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
+	return New(cfg, st, sched)
 }
 
 func authHeader() string {
@@ -115,6 +131,24 @@ func TestAuthSetsSessionCookie(t *testing.T) {
 	}
 }
 
+func TestSessionCookieAttributes(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie")
+	}
+	if !cookie.HttpOnly {
+		t.Error("session cookie must be HttpOnly")
+	}
+	if cookie.SameSite != http.SameSiteStrictMode {
+		t.Errorf("session cookie SameSite = %v, want Strict", cookie.SameSite)
+	}
+	if cookie.Path != "/" {
+		t.Errorf("session cookie Path = %q, want /", cookie.Path)
+	}
+}
+
 func TestSessionCookieAllowsAccessWithoutBasicAuth(t *testing.T) {
 	srv, _, _ := setupTestServer(t)
 
@@ -132,19 +166,41 @@ func TestSessionCookieAllowsAccessWithoutBasicAuth(t *testing.T) {
 	}
 }
 
-func TestExpiredSessionRequiresReauth(t *testing.T) {
-	// Use 0-minute timeout so sessions expire immediately.
-	cfg := config.NewForTestWithTimeout(8443, "admin", "testpass", 0)
-	st := state.New()
-	ctx := context.Background()
-	noopExec := scheduler.ExecFuncs{
-		Restart:    func() error { return nil },
-		LockScreen: func() error { return nil },
+func TestBasicAuthWithValidSessionDoesNotCreateNewSession(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+
+	// Get session cookie via Basic Auth.
+	w1 := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie1 := extractSessionCookie(w1)
+	if cookie1 == nil {
+		t.Fatal("expected session cookie")
 	}
-	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
-	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
-	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
-	srv := New(cfg, st, sched)
+
+	// Second request with BOTH cookie and Basic Auth.
+	w2 := doRequestWithCookie(srv.Handler, "GET", "/api/status", authHeader(), []*http.Cookie{cookie1})
+	cookie2 := extractSessionCookie(w2)
+	// Should not issue a new cookie since the session is still valid.
+	if cookie2 != nil {
+		t.Error("should not create a new session when existing session is valid")
+	}
+}
+
+func TestMultipleAuthsCreateDistinctSessions(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w1 := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	w2 := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	c1 := extractSessionCookie(w1)
+	c2 := extractSessionCookie(w2)
+	if c1 == nil || c2 == nil {
+		t.Fatal("expected session cookies")
+	}
+	if c1.Value == c2.Value {
+		t.Error("each Basic Auth should create a unique session token")
+	}
+}
+
+func TestExpiredSessionRequiresReauth(t *testing.T) {
+	srv := setupTestServerWithTimeout(t, 0)
 
 	// Get a session cookie.
 	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
@@ -161,12 +217,93 @@ func TestExpiredSessionRequiresReauth(t *testing.T) {
 	}
 }
 
+func TestExpiredSessionClearsCookie(t *testing.T) {
+	srv := setupTestServerWithTimeout(t, 0)
+
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie")
+	}
+
+	time.Sleep(1 * time.Millisecond)
+	w2 := doRequestWithCookie(srv.Handler, "GET", "/api/status", "", []*http.Cookie{cookie})
+	// Should have a Set-Cookie with MaxAge=-1 to clear the stale cookie.
+	clearCookie := extractSessionCookie(w2)
+	if clearCookie == nil {
+		t.Fatal("expected Set-Cookie to clear expired session")
+	}
+	if clearCookie.MaxAge != -1 {
+		t.Errorf("expected MaxAge=-1 to clear cookie, got %d", clearCookie.MaxAge)
+	}
+}
+
 func TestInvalidSessionCookieRequiresAuth(t *testing.T) {
 	srv, _, _ := setupTestServer(t)
 	fakeCookie := &http.Cookie{Name: "winctl_session", Value: "invalid-token"}
 	w := doRequestWithCookie(srv.Handler, "GET", "/api/status", "", []*http.Cookie{fakeCookie})
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401 for invalid cookie, got %d", w.Code)
+	}
+}
+
+func TestConcurrentSessionCreation(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	var wg sync.WaitGroup
+	cookies := make([]*http.Cookie, 50)
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+			cookies[idx] = extractSessionCookie(w)
+		}(i)
+	}
+	wg.Wait()
+
+	seen := make(map[string]bool)
+	for i, c := range cookies {
+		if c == nil {
+			t.Errorf("goroutine %d: no session cookie", i)
+			continue
+		}
+		if seen[c.Value] {
+			t.Errorf("duplicate session token: %s", c.Value)
+		}
+		seen[c.Value] = true
+	}
+}
+
+// --- Logout ---
+
+func TestLogout(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+
+	// Get session.
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie")
+	}
+
+	// Logout.
+	w2 := doRequestWithCookie(srv.Handler, "POST", "/api/logout", "", []*http.Cookie{cookie})
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for logout, got %d", w2.Code)
+	}
+
+	// Session should be invalidated.
+	w3 := doRequestWithCookie(srv.Handler, "GET", "/api/status", "", []*http.Cookie{cookie})
+	if w3.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 after logout, got %d", w3.Code)
+	}
+}
+
+func TestLogoutRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/logout", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
 	}
 }
 
@@ -396,6 +533,7 @@ func TestAPIResponsesAreJSON(t *testing.T) {
 		{"POST", "/api/lock/once"},
 		{"POST", "/api/lock/schedule"},
 		{"POST", "/api/reset"},
+		{"POST", "/api/logout"},
 	}
 
 	for _, ep := range endpoints {

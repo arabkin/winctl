@@ -14,7 +14,8 @@ import (
 )
 
 func New(cfg *config.Config, st *state.State, sched *scheduler.Scheduler) *http.Server {
-	h := &handlers{state: st, scheduler: sched}
+	store := newSessionStore(cfg.SessionTimeoutMinutes)
+	h := &handlers{state: st, scheduler: sched, sessions: store}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", h.status)
@@ -23,6 +24,7 @@ func New(cfg *config.Config, st *state.State, sched *scheduler.Scheduler) *http.
 	mux.HandleFunc("/api/lock/once", h.lockOnce)
 	mux.HandleFunc("/api/lock/schedule", h.lockSchedule)
 	mux.HandleFunc("/api/reset", h.reset)
+	mux.HandleFunc("/api/logout", h.logout)
 
 	staticFS, err := fs.Sub(web.StaticFS, "static")
 	if err != nil {
@@ -32,7 +34,7 @@ func New(cfg *config.Config, st *state.State, sched *scheduler.Scheduler) *http.
 
 	return &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      basicAuth(cfg, mux),
+		Handler:      basicAuth(cfg, store, mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,

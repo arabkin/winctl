@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/hex"
+	"fmt"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -29,15 +31,26 @@ func newSessionStore(timeoutMinutes int) *sessionStore {
 	}
 }
 
-func (s *sessionStore) create() string {
+func (s *sessionStore) create() (string, error) {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("failed to generate session token: %w", err)
+	}
 	token := hex.EncodeToString(b)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sessions[token] = session{expiresAt: time.Now().Add(s.timeout)}
-	return token
+
+	// Lazy sweep of expired sessions to prevent unbounded growth.
+	now := time.Now()
+	for k, v := range s.sessions {
+		if now.After(v.expiresAt) {
+			delete(s.sessions, k)
+		}
+	}
+
+	s.sessions[token] = session{expiresAt: now.Add(s.timeout)}
+	return token, nil
 }
 
 func (s *sessionStore) valid(token string) bool {
@@ -60,9 +73,7 @@ func (s *sessionStore) remove(token string) {
 	delete(s.sessions, token)
 }
 
-func basicAuth(cfg *config.Config, next http.Handler) http.Handler {
-	store := newSessionStore(cfg.SessionTimeoutMinutes)
-
+func basicAuth(cfg *config.Config, store *sessionStore, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check existing session cookie.
 		if cookie, err := r.Cookie(sessionCookieName); err == nil {
@@ -89,7 +100,12 @@ func basicAuth(cfg *config.Config, next http.Handler) http.Handler {
 		}
 
 		// Credentials valid — create session.
-		token := store.create()
+		token, err := store.create()
+		if err != nil {
+			log.Printf("error: session token generation failed: %v", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
 		http.SetCookie(w, &http.Cookie{
 			Name:     sessionCookieName,
 			Value:    token,

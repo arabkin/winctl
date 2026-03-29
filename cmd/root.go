@@ -51,7 +51,7 @@ func Run() {
 func runForeground(dryRun bool, configFile string) {
 	cfg, err := config.Load(configFile)
 	if err != nil {
-		log.Printf("config warning: %v", err)
+		log.Fatalf("config error: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
