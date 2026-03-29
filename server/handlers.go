@@ -100,5 +100,12 @@ func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge: -1,
 		Path:   "/",
 	})
+	http.SetCookie(w, &http.Cookie{
+		Name:     loggedOutCookieName,
+		Value:    "1",
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   10,
+	})
 	writeJSON(w, map[string]string{"status": "logged out"})
 }

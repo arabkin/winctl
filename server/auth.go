@@ -13,6 +13,7 @@ import (
 )
 
 const sessionCookieName = "winctl_session"
+const loggedOutCookieName = "winctl_logged_out"
 
 type session struct {
 	expiresAt time.Time
@@ -87,6 +88,19 @@ func basicAuth(cfg *config.Config, store *sessionStore, next http.Handler) http.
 				MaxAge: -1,
 				Path:   "/",
 			})
+		}
+
+		// If the user just logged out, reject even valid Basic Auth credentials
+		// so the browser forgets the cached Authorization header.
+		if _, err := r.Cookie(loggedOutCookieName); err == nil {
+			http.SetCookie(w, &http.Cookie{
+				Name:   loggedOutCookieName,
+				MaxAge: -1,
+				Path:   "/",
+			})
+			w.Header().Set("WWW-Authenticate", `Basic realm="winctl"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
 		}
 
 		// No valid session — require Basic Auth.
