@@ -63,13 +63,17 @@ func runForeground(dryRun bool, configFile string) {
 	sched := scheduler.New(ctx, st, dryRun, restartIvl, lockIvl)
 	srv := server.New(cfg, configFile, st, sched)
 
-	sigCh := make(chan os.Signal, 1)
+	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-sigCh
 		log.Println("shutting down...")
 		sched.Stop()
 		cancel()
+		// Second signal force-exits immediately.
+		<-sigCh
+		log.Println("forced shutdown")
+		os.Exit(1)
 	}()
 
 	mode := ""

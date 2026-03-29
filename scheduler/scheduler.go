@@ -32,9 +32,13 @@ type Scheduler struct {
 	mu sync.Mutex
 
 	restartScheduleCancel context.CancelFunc
+	restartScheduleGen    uint64
 	restartOnceCancel     context.CancelFunc
+	restartOnceGen        uint64
 	lockScheduleCancel    context.CancelFunc
+	lockScheduleGen       uint64
 	lockOnceCancel        context.CancelFunc
+	lockOnceGen           uint64
 }
 
 func New(ctx context.Context, st *state.State, dryRun bool, restartInterval, lockInterval IntervalRange) *Scheduler {
@@ -84,13 +88,19 @@ func (s *Scheduler) StartRestartSchedule() {
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.restartScheduleCancel = cancel
+	s.restartScheduleGen++
+	gen := s.restartScheduleGen
 
 	go func() {
 		defer func() {
 			s.mu.Lock()
-			s.restartScheduleCancel = nil
-			s.mu.Unlock()
-			s.state.SetRestartSchedule(false, nil)
+			if s.restartScheduleGen == gen {
+				s.restartScheduleCancel = nil
+				s.mu.Unlock()
+				s.state.SetRestartSchedule(false, nil)
+			} else {
+				s.mu.Unlock()
+			}
 		}()
 
 		for {
@@ -134,6 +144,8 @@ func (s *Scheduler) RestartOnce() {
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.restartOnceCancel = cancel
+	s.restartOnceGen++
+	gen := s.restartOnceGen
 
 	at := time.Now().Add(60 * time.Second)
 	s.state.SetRestartOnce(true, &at)
@@ -152,9 +164,13 @@ func (s *Scheduler) RestartOnce() {
 		}
 		cancel()
 		s.mu.Lock()
-		s.restartOnceCancel = nil
-		s.mu.Unlock()
-		s.state.SetRestartOnce(false, nil)
+		if s.restartOnceGen == gen {
+			s.restartOnceCancel = nil
+			s.mu.Unlock()
+			s.state.SetRestartOnce(false, nil)
+		} else {
+			s.mu.Unlock()
+		}
 	}()
 }
 
@@ -166,13 +182,19 @@ func (s *Scheduler) StartLockSchedule() {
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.lockScheduleCancel = cancel
+	s.lockScheduleGen++
+	gen := s.lockScheduleGen
 
 	go func() {
 		defer func() {
 			s.mu.Lock()
-			s.lockScheduleCancel = nil
-			s.mu.Unlock()
-			s.state.SetLockSchedule(false, nil)
+			if s.lockScheduleGen == gen {
+				s.lockScheduleCancel = nil
+				s.mu.Unlock()
+				s.state.SetLockSchedule(false, nil)
+			} else {
+				s.mu.Unlock()
+			}
 		}()
 
 		for {
@@ -216,6 +238,8 @@ func (s *Scheduler) LockOnce() {
 	}
 	ctx, cancel := context.WithCancel(s.ctx)
 	s.lockOnceCancel = cancel
+	s.lockOnceGen++
+	gen := s.lockOnceGen
 
 	at := time.Now().Add(60 * time.Second)
 	s.state.SetLockOnce(true, &at)
@@ -234,9 +258,13 @@ func (s *Scheduler) LockOnce() {
 		}
 		cancel()
 		s.mu.Lock()
-		s.lockOnceCancel = nil
-		s.mu.Unlock()
-		s.state.SetLockOnce(false, nil)
+		if s.lockOnceGen == gen {
+			s.lockOnceCancel = nil
+			s.mu.Unlock()
+			s.state.SetLockOnce(false, nil)
+		} else {
+			s.mu.Unlock()
+		}
 	}()
 }
 

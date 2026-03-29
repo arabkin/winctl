@@ -20,7 +20,9 @@ func writeJSON(w http.ResponseWriter, v any) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(v); err != nil {
 		log.Printf("error: failed to encode JSON response: %v", err)
-		http.Error(w, `{"error":"internal server error"}`, http.StatusInternalServerError)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"internal server error"}`))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -136,13 +138,14 @@ func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 	cfg, err := h.config.reload()
 	if err != nil {
 		log.Printf("config reload failed: %v", err)
-		writeJSON(w, map[string]string{"status": "config reload failed", "error": err.Error()})
+		http.Error(w, "config reload failed", http.StatusInternalServerError)
 		return
 	}
 	h.scheduler.UpdateIntervals(
 		scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes},
 		scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes},
 	)
+	h.sessions.updateTimeout(cfg.SessionTimeoutMinutes)
 	log.Println("configuration reloaded successfully")
 	writeJSON(w, map[string]string{"status": "configuration reloaded"})
 }

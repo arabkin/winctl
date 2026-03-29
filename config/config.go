@@ -99,17 +99,18 @@ func Load(path string) (*Config, error) {
 	if cfg.password == "" {
 		return nil, fmt.Errorf("password must not be empty in config %s", path)
 	}
-	if cfg.RestartMinMinutes < 1 {
-		return nil, fmt.Errorf("restart_min_minutes must be >= 1 in config %s", path)
+	const maxIntervalMinutes = 1440 // 24 hours
+	if cfg.RestartMinMinutes < 1 || cfg.RestartMinMinutes > maxIntervalMinutes {
+		return nil, fmt.Errorf("restart_min_minutes must be 1-%d in config %s", maxIntervalMinutes, path)
 	}
-	if cfg.RestartMaxMinutes < cfg.RestartMinMinutes {
-		return nil, fmt.Errorf("restart_max_minutes (%d) must be >= restart_min_minutes (%d) in config %s", cfg.RestartMaxMinutes, cfg.RestartMinMinutes, path)
+	if cfg.RestartMaxMinutes < cfg.RestartMinMinutes || cfg.RestartMaxMinutes > maxIntervalMinutes {
+		return nil, fmt.Errorf("restart_max_minutes must be %d-%d in config %s", cfg.RestartMinMinutes, maxIntervalMinutes, path)
 	}
-	if cfg.LockMinMinutes < 1 {
-		return nil, fmt.Errorf("lock_min_minutes must be >= 1 in config %s", path)
+	if cfg.LockMinMinutes < 1 || cfg.LockMinMinutes > maxIntervalMinutes {
+		return nil, fmt.Errorf("lock_min_minutes must be 1-%d in config %s", maxIntervalMinutes, path)
 	}
-	if cfg.LockMaxMinutes < cfg.LockMinMinutes {
-		return nil, fmt.Errorf("lock_max_minutes (%d) must be >= lock_min_minutes (%d) in config %s", cfg.LockMaxMinutes, cfg.LockMinMinutes, path)
+	if cfg.LockMaxMinutes < cfg.LockMinMinutes || cfg.LockMaxMinutes > maxIntervalMinutes {
+		return nil, fmt.Errorf("lock_max_minutes must be %d-%d in config %s", cfg.LockMinMinutes, maxIntervalMinutes, path)
 	}
 
 	return cfg, nil

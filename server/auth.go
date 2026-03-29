@@ -59,6 +59,12 @@ func newSessionStore(timeoutMinutes int) *sessionStore {
 	}
 }
 
+func (s *sessionStore) updateTimeout(minutes int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.timeout = time.Duration(minutes) * time.Minute
+}
+
 func (s *sessionStore) create() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -103,6 +109,19 @@ func (s *sessionStore) remove(token string) {
 
 func basicAuth(ch *configHolder, store *sessionStore, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Check logged-out cookie first — must take priority over valid sessions
+		// so the browser forgets the cached Authorization header after logout.
+		if _, err := r.Cookie(loggedOutCookieName); err == nil {
+			http.SetCookie(w, &http.Cookie{
+				Name:   loggedOutCookieName,
+				MaxAge: -1,
+				Path:   "/",
+			})
+			w.Header().Set("WWW-Authenticate", `Basic realm="winctl"`)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+			return
+		}
+
 		// Check existing session cookie.
 		if cookie, err := r.Cookie(sessionCookieName); err == nil {
 			if store.valid(cookie.Value) {
@@ -117,25 +136,12 @@ func basicAuth(ch *configHolder, store *sessionStore, next http.Handler) http.Ha
 			})
 		}
 
-		// If the user just logged out, reject even valid Basic Auth credentials
-		// so the browser forgets the cached Authorization header.
-		if _, err := r.Cookie(loggedOutCookieName); err == nil {
-			http.SetCookie(w, &http.Cookie{
-				Name:   loggedOutCookieName,
-				MaxAge: -1,
-				Path:   "/",
-			})
-			w.Header().Set("WWW-Authenticate", `Basic realm="winctl"`)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
-		}
-
 		// No valid session — require Basic Auth.
 		cfg := ch.get()
 		user, pass, ok := r.BasicAuth()
-		if !ok ||
-			subtle.ConstantTimeCompare([]byte(user), []byte(cfg.Username)) != 1 ||
-			subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.Password())) != 1 {
+		userOK := subtle.ConstantTimeCompare([]byte(user), []byte(cfg.Username))
+		passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.Password()))
+		if !ok || (userOK&passOK) != 1 {
 			w.Header().Set("WWW-Authenticate", `Basic realm="winctl"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return

@@ -87,3 +87,12 @@ button:active { transform: scale(0.97); }
 .btn-reload:hover { background: #21618c; }
 .btn-logout { padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #6a2d2d; border-radius: 12px; }
 .btn-logout:hover { background: #8a3a3a; }
+
+.toast {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    padding: 0.6rem 1.2rem; border-radius: 6px; font-size: 0.85rem; font-weight: 600;
+    z-index: 100; transition: opacity 0.3s;
+}
+.toast.hidden { opacity: 0; pointer-events: none; }
+.toast-error { background: #6a2d2d; color: #e4b7b7; }
+.toast-ok { background: #2d6a4f; color: #b7e4c7; }

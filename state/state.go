@@ -62,28 +62,28 @@ func (s *State) SetRestartSchedule(on bool, next *time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.restartScheduleOn = on
-	s.restartNextAt = next
+	s.restartNextAt = copyTime(next)
 }
 
 func (s *State) SetRestartOnce(pending bool, at *time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.restartPendingOnce = pending
-	s.restartOnceAt = at
+	s.restartOnceAt = copyTime(at)
 }
 
 func (s *State) SetLockSchedule(on bool, next *time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lockScheduleOn = on
-	s.lockNextAt = next
+	s.lockNextAt = copyTime(next)
 }
 
 func (s *State) SetLockOnce(pending bool, at *time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lockPendingOnce = pending
-	s.lockOnceAt = at
+	s.lockOnceAt = copyTime(at)
 }
 
 func (s *State) Reset() {

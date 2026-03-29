@@ -1,15 +1,24 @@
+function showToast(msg, type) {
+    var el = document.getElementById("toast");
+    el.textContent = msg;
+    el.className = "toast toast-" + type;
+    setTimeout(function() { el.className = "toast hidden"; }, 3000);
+}
+
 function api(method, path) {
     fetch(path, { method: method })
         .then(r => {
             if (r.status === 401) {
                 window.location.reload();
-                return;
+                return null;
             }
             if (!r.ok) throw new Error("HTTP " + r.status);
             return r.json();
         })
-        .then(() => poll())
-        .catch(err => console.error(err));
+        .then(data => { if (data !== null) poll(); })
+        .catch(err => {
+            showToast("Action failed: " + err.message, "error");
+        });
 }
 
 function fetchConfig() {
@@ -25,7 +34,9 @@ function fetchConfig() {
             document.getElementById("cfg-restart-interval").textContent = data.restart_min_minutes + " - " + data.restart_max_minutes + " min";
             document.getElementById("cfg-lock-interval").textContent = data.lock_min_minutes + " - " + data.lock_max_minutes + " min";
         })
-        .catch(err => console.error(err));
+        .catch(err => {
+            showToast("Failed to load config", "error");
+        });
 }
 
 function reloadConfig() {
@@ -35,8 +46,13 @@ function reloadConfig() {
             if (!r.ok) throw new Error("HTTP " + r.status);
             return r.json();
         })
-        .then(() => fetchConfig())
-        .catch(err => console.error(err));
+        .then(() => {
+            showToast("Configuration reloaded", "ok");
+            fetchConfig();
+        })
+        .catch(err => {
+            showToast("Config reload failed", "error");
+        });
 }
 
 function logout() {

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -588,5 +589,180 @@ func TestDisableWhenAlreadyDisabledIsNoop(t *testing.T) {
 	w = doRequest(srv.Handler, "DELETE", "/api/lock/schedule", authHeader())
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 for noop disable, got %d", w.Code)
+	}
+}
+
+// --- Logged-out cookie ---
+
+func TestLogoutSetsLoggedOutCookie(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	cookie := extractSessionCookie(w)
+	if cookie == nil {
+		t.Fatal("expected session cookie")
+	}
+
+	w2 := doRequestWithCookie(srv.Handler, "POST", "/api/logout", "", []*http.Cookie{cookie})
+	var loggedOutCookie *http.Cookie
+	for _, c := range w2.Result().Cookies() {
+		if c.Name == "winctl_logged_out" {
+			loggedOutCookie = c
+		}
+	}
+	if loggedOutCookie == nil {
+		t.Fatal("expected winctl_logged_out cookie after logout")
+	}
+	if loggedOutCookie.Value != "1" {
+		t.Errorf("logged_out cookie value = %q, want 1", loggedOutCookie.Value)
+	}
+}
+
+func TestLoggedOutCookieRejectsValidBasicAuth(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+
+	loggedOutCookie := &http.Cookie{Name: "winctl_logged_out", Value: "1"}
+	w := doRequestWithCookie(srv.Handler, "GET", "/api/status", authHeader(), []*http.Cookie{loggedOutCookie})
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 when logged_out cookie present, got %d", w.Code)
+	}
+
+	// The response should clear the logged_out cookie.
+	var cleared bool
+	for _, c := range w.Result().Cookies() {
+		if c.Name == "winctl_logged_out" && c.MaxAge == -1 {
+			cleared = true
+		}
+	}
+	if !cleared {
+		t.Error("expected logged_out cookie to be cleared in the 401 response")
+	}
+}
+
+func TestAfterLoggedOutCookieClearedAuthWorks(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+
+	// First request with logged_out cookie — rejected.
+	loggedOutCookie := &http.Cookie{Name: "winctl_logged_out", Value: "1"}
+	w := doRequestWithCookie(srv.Handler, "GET", "/api/status", authHeader(), []*http.Cookie{loggedOutCookie})
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+
+	// Second request without the logged_out cookie — should succeed.
+	w2 := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w2.Code != http.StatusOK {
+		t.Errorf("expected 200 after logged_out cookie cleared, got %d", w2.Code)
+	}
+}
+
+// --- Config endpoints ---
+
+func TestConfigGetReturnsJSON(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/config", authHeader())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %s, want application/json", ct)
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if _, ok := resp["port"]; !ok {
+		t.Error("response missing 'port' field")
+	}
+	if _, ok := resp["username"]; !ok {
+		t.Error("response missing 'username' field")
+	}
+	// Password must NOT be in the response.
+	if _, ok := resp["password"]; ok {
+		t.Error("response must not include password")
+	}
+}
+
+func TestConfigGetRejectsPost(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "POST", "/api/config", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestConfigReloadRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/config/reload", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestConfigReloadWithBadPathReturns500(t *testing.T) {
+	cfg := config.NewForTest(8443, "admin", "testpass")
+	st := state.New(false)
+	ctx := context.Background()
+	noopExec := scheduler.ExecFuncs{
+		Restart:    func() error { return nil },
+		LockScreen: func() error { return nil },
+	}
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
+
+	// Write invalid JSON to a real file so Load() fails at parse time.
+	dir := t.TempDir()
+	path := dir + "/config.json"
+	os.WriteFile(path, []byte("{invalid json"), 0600)
+
+	srv := New(cfg, path, st, sched)
+	w := doRequest(srv.Handler, "POST", "/api/config/reload", authHeader())
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 for reload with bad config, got %d", w.Code)
+	}
+}
+
+func TestConfigReloadWithValidConfig(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/config.json"
+
+	cfg := config.NewForTest(8443, "admin", "testpass")
+	st := state.New(false)
+	ctx := context.Background()
+	noopExec := scheduler.ExecFuncs{
+		Restart:    func() error { return nil },
+		LockScreen: func() error { return nil },
+	}
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
+
+	// Write a valid config file.
+	configJSON := `{"port":8443,"username":"admin","password":"Y2hhbmdlbWU=","session_timeout_minutes":30,"restart_min_minutes":2,"restart_max_minutes":8,"lock_min_minutes":3,"lock_max_minutes":10}`
+	if err := os.WriteFile(path, []byte(configJSON), 0600); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	srv := New(cfg, path, st, sched)
+	w := doRequest(srv.Handler, "POST", "/api/config/reload", authHeader())
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for valid config reload, got %d", w.Code)
+	}
+
+	var resp map[string]string
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if resp["status"] != "configuration reloaded" {
+		t.Errorf("unexpected status: %s", resp["status"])
+	}
+}
+
+// --- Lock once method ---
+
+func TestLockOnceRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/lock/once", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
 	}
 }
