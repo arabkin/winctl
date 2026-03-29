@@ -90,6 +90,28 @@ func Load(path string) (*Config, error) {
 		cfg.SessionTimeoutMinutes = 30
 	}
 
+	if cfg.Port < 1 || cfg.Port > 65535 {
+		return nil, fmt.Errorf("invalid port %d in config %s: must be 1-65535", cfg.Port, path)
+	}
+	if cfg.Username == "" {
+		return nil, fmt.Errorf("username must not be empty in config %s", path)
+	}
+	if cfg.password == "" {
+		return nil, fmt.Errorf("password must not be empty in config %s", path)
+	}
+	if cfg.RestartMinMinutes < 1 {
+		return nil, fmt.Errorf("restart_min_minutes must be >= 1 in config %s", path)
+	}
+	if cfg.RestartMaxMinutes < cfg.RestartMinMinutes {
+		return nil, fmt.Errorf("restart_max_minutes (%d) must be >= restart_min_minutes (%d) in config %s", cfg.RestartMaxMinutes, cfg.RestartMinMinutes, path)
+	}
+	if cfg.LockMinMinutes < 1 {
+		return nil, fmt.Errorf("lock_min_minutes must be >= 1 in config %s", path)
+	}
+	if cfg.LockMaxMinutes < cfg.LockMinMinutes {
+		return nil, fmt.Errorf("lock_max_minutes (%d) must be >= lock_min_minutes (%d) in config %s", cfg.LockMaxMinutes, cfg.LockMinMinutes, path)
+	}
+
 	return cfg, nil
 }
 

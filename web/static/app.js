@@ -1,7 +1,20 @@
 function api(method, path) {
     fetch(path, { method: method })
-        .then(r => r.json())
+        .then(r => {
+            if (r.status === 401) {
+                window.location.reload();
+                return;
+            }
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+        })
         .then(() => poll())
+        .catch(err => console.error(err));
+}
+
+function logout() {
+    fetch("/api/logout", { method: "POST" })
+        .then(() => { window.location.reload(); })
         .catch(err => console.error(err));
 }
 

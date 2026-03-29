@@ -86,20 +86,28 @@ func (s *Scheduler) StartRestartSchedule() {
 	s.restartScheduleCancel = cancel
 
 	go func() {
+		defer func() {
+			s.mu.Lock()
+			s.restartScheduleCancel = nil
+			s.mu.Unlock()
+			s.state.SetRestartSchedule(false, nil)
+		}()
+
 		for {
 			interval := randomInterval(s.restartInterval)
 			next := time.Now().Add(interval)
 			s.state.SetRestartSchedule(true, &next)
 			log.Printf("restart scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
 
+			timer := time.NewTimer(interval)
 			select {
-			case <-time.After(interval):
+			case <-timer.C:
 				log.Println("executing scheduled restart")
 				if err := s.exec.Restart(); err != nil {
 					log.Printf("restart failed: %v", err)
 				}
 			case <-ctx.Done():
-				s.state.SetRestartSchedule(false, nil)
+				timer.Stop()
 				return
 			}
 		}
@@ -112,7 +120,6 @@ func (s *Scheduler) StopRestartSchedule() {
 	if s.restartScheduleCancel != nil {
 		s.restartScheduleCancel()
 		s.restartScheduleCancel = nil
-		s.state.SetRestartSchedule(false, nil)
 	}
 }
 
@@ -130,20 +137,21 @@ func (s *Scheduler) RestartOnce() {
 	log.Printf("one-shot restart in 60s (at %s)", at.Format(time.RFC3339))
 
 	go func() {
+		timer := time.NewTimer(60 * time.Second)
 		select {
-		case <-time.After(60 * time.Second):
+		case <-timer.C:
 			log.Println("executing one-shot restart")
 			if err := s.exec.Restart(); err != nil {
 				log.Printf("restart failed: %v", err)
 			}
-			s.mu.Lock()
-			s.restartOnceCancel = nil
-			s.mu.Unlock()
-			s.state.SetRestartOnce(false, nil)
 		case <-ctx.Done():
-			s.state.SetRestartOnce(false, nil)
-			return
+			timer.Stop()
 		}
+		cancel()
+		s.mu.Lock()
+		s.restartOnceCancel = nil
+		s.mu.Unlock()
+		s.state.SetRestartOnce(false, nil)
 	}()
 }
 
@@ -157,20 +165,28 @@ func (s *Scheduler) StartLockSchedule() {
 	s.lockScheduleCancel = cancel
 
 	go func() {
+		defer func() {
+			s.mu.Lock()
+			s.lockScheduleCancel = nil
+			s.mu.Unlock()
+			s.state.SetLockSchedule(false, nil)
+		}()
+
 		for {
 			interval := randomInterval(s.lockInterval)
 			next := time.Now().Add(interval)
 			s.state.SetLockSchedule(true, &next)
 			log.Printf("lock scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
 
+			timer := time.NewTimer(interval)
 			select {
-			case <-time.After(interval):
+			case <-timer.C:
 				log.Println("executing scheduled lock")
 				if err := s.exec.LockScreen(); err != nil {
 					log.Printf("lock failed: %v", err)
 				}
 			case <-ctx.Done():
-				s.state.SetLockSchedule(false, nil)
+				timer.Stop()
 				return
 			}
 		}
@@ -183,7 +199,6 @@ func (s *Scheduler) StopLockSchedule() {
 	if s.lockScheduleCancel != nil {
 		s.lockScheduleCancel()
 		s.lockScheduleCancel = nil
-		s.state.SetLockSchedule(false, nil)
 	}
 }
 
@@ -201,20 +216,21 @@ func (s *Scheduler) LockOnce() {
 	log.Printf("one-shot lock in 60s (at %s)", at.Format(time.RFC3339))
 
 	go func() {
+		timer := time.NewTimer(60 * time.Second)
 		select {
-		case <-time.After(60 * time.Second):
+		case <-timer.C:
 			log.Println("executing one-shot lock")
 			if err := s.exec.LockScreen(); err != nil {
 				log.Printf("lock failed: %v", err)
 			}
-			s.mu.Lock()
-			s.lockOnceCancel = nil
-			s.mu.Unlock()
-			s.state.SetLockOnce(false, nil)
 		case <-ctx.Done():
-			s.state.SetLockOnce(false, nil)
-			return
+			timer.Stop()
 		}
+		cancel()
+		s.mu.Lock()
+		s.lockOnceCancel = nil
+		s.mu.Unlock()
+		s.state.SetLockOnce(false, nil)
 	}()
 }
 

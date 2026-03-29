@@ -8,6 +8,7 @@ import (
 	"os"
 	"winctl/service"
 
+	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
@@ -86,7 +87,7 @@ func stopService() {
 	}
 	defer s.Close()
 
-	_, err = s.Control(mgr.ServiceControl(1)) // SERVICE_CONTROL_STOP = 1
+	_, err = s.Control(svc.Stop)
 	if err != nil {
 		log.Fatalf("failed to stop service: %v", err)
 	}

@@ -135,7 +135,7 @@ func TestLoadValidatesSessionTimeout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 0}`
+	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 0, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
 	os.WriteFile(path, []byte(data), 0600)
 
 	cfg, err := Load(path)
@@ -151,7 +151,7 @@ func TestLoadValidatesNegativeSessionTimeout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": -5}`
+	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": -5, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
 	os.WriteFile(path, []byte(data), 0600)
 
 	cfg, err := Load(path)
@@ -160,5 +160,53 @@ func TestLoadValidatesNegativeSessionTimeout(t *testing.T) {
 	}
 	if cfg.SessionTimeoutMinutes != 30 {
 		t.Errorf("expected session timeout to default to 30 for negative value, got %d", cfg.SessionTimeoutMinutes)
+	}
+}
+
+func TestLoadValidatesPort(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	data := `{"port": 0, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
+	os.WriteFile(path, []byte(data), 0600)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Error("expected error for port 0")
+	}
+}
+
+func TestLoadValidatesEmptyUsername(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	data := `{"port": 8443, "username": "", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
+	os.WriteFile(path, []byte(data), 0600)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Error("expected error for empty username")
+	}
+}
+
+func TestLoadValidatesIntervalRange(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 0, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
+	os.WriteFile(path, []byte(data), 0600)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Error("expected error for restart_min_minutes = 0")
+	}
+}
+
+func TestLoadValidatesMaxLessThanMin(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 15, "restart_max_minutes": 5, "lock_min_minutes": 5, "lock_max_minutes": 15}`
+	os.WriteFile(path, []byte(data), 0600)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Error("expected error for restart_max_minutes < restart_min_minutes")
 	}
 }

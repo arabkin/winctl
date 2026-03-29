@@ -34,19 +34,27 @@ func New(dryRun bool) *State {
 	return &State{dryRun: dryRun}
 }
 
+func copyTime(t *time.Time) *time.Time {
+	if t == nil {
+		return nil
+	}
+	v := *t
+	return &v
+}
+
 func (s *State) Status() StatusDTO {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return StatusDTO{
 		DryRun:                s.dryRun,
 		RestartScheduleActive: s.restartScheduleOn,
-		RestartNextAt:         s.restartNextAt,
+		RestartNextAt:         copyTime(s.restartNextAt),
 		RestartPendingOnce:    s.restartPendingOnce,
-		RestartOnceAt:         s.restartOnceAt,
+		RestartOnceAt:         copyTime(s.restartOnceAt),
 		LockScheduleActive:   s.lockScheduleOn,
-		LockNextAt:           s.lockNextAt,
+		LockNextAt:           copyTime(s.lockNextAt),
 		LockPendingOnce:      s.lockPendingOnce,
-		LockOnceAt:           s.lockOnceAt,
+		LockOnceAt:           copyTime(s.lockOnceAt),
 	}
 }
 
