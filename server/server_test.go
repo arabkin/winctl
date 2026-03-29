@@ -22,7 +22,9 @@ func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Sched
 		Restart:    func() error { return nil },
 		LockScreen: func() error { return nil },
 	}
-	sched := scheduler.NewWithExec(ctx, st, noopExec)
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
 	srv := New(cfg, st, sched)
 	return srv, st, sched
 }

@@ -15,11 +15,19 @@ type ExecFuncs struct {
 	LockScreen func() error
 }
 
+type IntervalRange struct {
+	MinMinutes int
+	MaxMinutes int
+}
+
 type Scheduler struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	state  *state.State
 	exec   ExecFuncs
+
+	restartInterval IntervalRange
+	lockInterval    IntervalRange
 
 	mu sync.Mutex
 
@@ -29,7 +37,7 @@ type Scheduler struct {
 	lockOnceCancel        context.CancelFunc
 }
 
-func New(ctx context.Context, st *state.State, dryRun bool) *Scheduler {
+func New(ctx context.Context, st *state.State, dryRun bool, restartInterval, lockInterval IntervalRange) *Scheduler {
 	exec := ExecFuncs{
 		Restart:    executor.Restart,
 		LockScreen: executor.LockScreen,
@@ -40,16 +48,18 @@ func New(ctx context.Context, st *state.State, dryRun bool) *Scheduler {
 			LockScreen: executor.DryLockScreen,
 		}
 	}
-	return NewWithExec(ctx, st, exec)
+	return NewWithExec(ctx, st, exec, restartInterval, lockInterval)
 }
 
-func NewWithExec(ctx context.Context, st *state.State, exec ExecFuncs) *Scheduler {
+func NewWithExec(ctx context.Context, st *state.State, exec ExecFuncs, restartInterval, lockInterval IntervalRange) *Scheduler {
 	ctx, cancel := context.WithCancel(ctx)
 	return &Scheduler{
-		ctx:    ctx,
-		cancel: cancel,
-		state:  st,
-		exec:   exec,
+		ctx:             ctx,
+		cancel:          cancel,
+		state:           st,
+		exec:            exec,
+		restartInterval: restartInterval,
+		lockInterval:    lockInterval,
 	}
 }
 
@@ -57,8 +67,12 @@ func (s *Scheduler) Stop() {
 	s.cancel()
 }
 
-func randomInterval() time.Duration {
-	minutes := rand.IntN(10) + 1 // 1–10
+func randomInterval(ir IntervalRange) time.Duration {
+	spread := ir.MaxMinutes - ir.MinMinutes
+	if spread <= 0 {
+		return time.Duration(ir.MinMinutes) * time.Minute
+	}
+	minutes := rand.IntN(spread+1) + ir.MinMinutes
 	return time.Duration(minutes) * time.Minute
 }
 
@@ -73,7 +87,7 @@ func (s *Scheduler) StartRestartSchedule() {
 
 	go func() {
 		for {
-			interval := randomInterval()
+			interval := randomInterval(s.restartInterval)
 			next := time.Now().Add(interval)
 			s.state.SetRestartSchedule(true, &next)
 			log.Printf("restart scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
@@ -144,7 +158,7 @@ func (s *Scheduler) StartLockSchedule() {
 
 	go func() {
 		for {
-			interval := randomInterval()
+			interval := randomInterval(s.lockInterval)
 			next := time.Now().Add(interval)
 			s.state.SetLockSchedule(true, &next)
 			log.Printf("lock scheduled in %v (at %s)", interval, next.Format(time.RFC3339))

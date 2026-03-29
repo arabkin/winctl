@@ -32,7 +32,9 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	defer cancel()
 
 	st := state.New()
-	sched := scheduler.New(ctx, st, false)
+	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
+	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
+	sched := scheduler.New(ctx, st, false, restartIvl, lockIvl)
 	srv := server.New(cfg, st, sched)
 
 	go func() {

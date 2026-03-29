@@ -15,10 +15,19 @@ func noopExec() ExecFuncs {
 	}
 }
 
+func defaultIntervals() (IntervalRange, IntervalRange) {
+	return IntervalRange{5, 15}, IntervalRange{5, 15}
+}
+
+func testScheduler(ctx context.Context, st *state.State) *Scheduler {
+	r, l := defaultIntervals()
+	return NewWithExec(ctx, st, noopExec(), r, l)
+}
+
 func TestStartAndStopRestartSchedule(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.StartRestartSchedule()
@@ -44,7 +53,7 @@ func TestStartAndStopRestartSchedule(t *testing.T) {
 func TestStartRestartScheduleIdempotent(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.StartRestartSchedule()
@@ -63,7 +72,7 @@ func TestStartRestartScheduleIdempotent(t *testing.T) {
 func TestStopRestartScheduleWhenNotRunning(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	// Should not panic
@@ -73,7 +82,7 @@ func TestStopRestartScheduleWhenNotRunning(t *testing.T) {
 func TestStartAndStopLockSchedule(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.StartLockSchedule()
@@ -96,7 +105,7 @@ func TestStartAndStopLockSchedule(t *testing.T) {
 func TestRestartOnce(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.RestartOnce()
@@ -114,7 +123,7 @@ func TestRestartOnce(t *testing.T) {
 func TestRestartOnceIdempotent(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.RestartOnce()
@@ -130,7 +139,7 @@ func TestRestartOnceIdempotent(t *testing.T) {
 func TestLockOnce(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.LockOnce()
@@ -145,7 +154,7 @@ func TestLockOnce(t *testing.T) {
 func TestResetAll(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	s.StartRestartSchedule()
@@ -169,7 +178,7 @@ func TestResetAll(t *testing.T) {
 func TestResetAllWhenNothingActive(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 	defer s.Stop()
 
 	// Should not panic
@@ -179,7 +188,7 @@ func TestResetAllWhenNothingActive(t *testing.T) {
 func TestStopCancelsSchedules(t *testing.T) {
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, noopExec())
+	s := testScheduler(ctx, st)
 
 	s.StartRestartSchedule()
 	s.StartLockSchedule()
@@ -198,10 +207,31 @@ func TestStopCancelsSchedules(t *testing.T) {
 }
 
 func TestRandomIntervalRange(t *testing.T) {
+	ir := IntervalRange{5, 15}
 	for i := 0; i < 100; i++ {
-		d := randomInterval()
-		if d < 1*time.Minute || d > 10*time.Minute {
-			t.Errorf("randomInterval() = %v, want [1m, 10m]", d)
+		d := randomInterval(ir)
+		if d < 5*time.Minute || d > 15*time.Minute {
+			t.Errorf("randomInterval() = %v, want [5m, 15m]", d)
+		}
+	}
+}
+
+func TestRandomIntervalCustomRange(t *testing.T) {
+	ir := IntervalRange{1, 3}
+	for i := 0; i < 100; i++ {
+		d := randomInterval(ir)
+		if d < 1*time.Minute || d > 3*time.Minute {
+			t.Errorf("randomInterval() = %v, want [1m, 3m]", d)
+		}
+	}
+}
+
+func TestRandomIntervalEqualMinMax(t *testing.T) {
+	ir := IntervalRange{7, 7}
+	for i := 0; i < 10; i++ {
+		d := randomInterval(ir)
+		if d != 7*time.Minute {
+			t.Errorf("randomInterval() = %v, want exactly 7m", d)
 		}
 	}
 }
@@ -219,7 +249,8 @@ func TestExecFuncsCalled(t *testing.T) {
 	// but we can verify the functions are wired correctly by checking the struct.
 	st := state.New()
 	ctx := context.Background()
-	s := NewWithExec(ctx, st, exec)
+	r, l := defaultIntervals()
+	s := NewWithExec(ctx, st, exec, r, l)
 	defer s.Stop()
 
 	if s.exec.Restart == nil || s.exec.LockScreen == nil {

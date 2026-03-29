@@ -57,7 +57,9 @@ func runForeground(dryRun bool) {
 	defer cancel()
 
 	st := state.New()
-	sched := scheduler.New(ctx, st, dryRun)
+	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
+	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
+	sched := scheduler.New(ctx, st, dryRun, restartIvl, lockIvl)
 	srv := server.New(cfg, st, sched)
 
 	sigCh := make(chan os.Signal, 1)
