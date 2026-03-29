@@ -94,7 +94,10 @@ func (s *Scheduler) StartRestartSchedule() {
 		}()
 
 		for {
-			interval := randomInterval(s.restartInterval)
+			s.mu.Lock()
+			ivl := s.restartInterval
+			s.mu.Unlock()
+			interval := randomInterval(ivl)
 			next := time.Now().Add(interval)
 			s.state.SetRestartSchedule(true, &next)
 			log.Printf("restart scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
@@ -173,7 +176,10 @@ func (s *Scheduler) StartLockSchedule() {
 		}()
 
 		for {
-			interval := randomInterval(s.lockInterval)
+			s.mu.Lock()
+			ivl := s.lockInterval
+			s.mu.Unlock()
+			interval := randomInterval(ivl)
 			next := time.Now().Add(interval)
 			s.state.SetLockSchedule(true, &next)
 			log.Printf("lock scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
@@ -232,6 +238,15 @@ func (s *Scheduler) LockOnce() {
 		s.mu.Unlock()
 		s.state.SetLockOnce(false, nil)
 	}()
+}
+
+func (s *Scheduler) UpdateIntervals(restart, lock IntervalRange) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.restartInterval = restart
+	s.lockInterval = lock
+	log.Printf("scheduler intervals updated: restart %d-%dm, lock %d-%dm",
+		restart.MinMinutes, restart.MaxMinutes, lock.MinMinutes, lock.MaxMinutes)
 }
 
 func (s *Scheduler) ResetAll() {

@@ -15,6 +15,33 @@ import (
 const sessionCookieName = "winctl_session"
 const loggedOutCookieName = "winctl_logged_out"
 
+type configHolder struct {
+	mu   sync.RWMutex
+	cfg  *config.Config
+	path string
+}
+
+func newConfigHolder(cfg *config.Config, path string) *configHolder {
+	return &configHolder{cfg: cfg, path: path}
+}
+
+func (ch *configHolder) get() *config.Config {
+	ch.mu.RLock()
+	defer ch.mu.RUnlock()
+	return ch.cfg
+}
+
+func (ch *configHolder) reload() (*config.Config, error) {
+	cfg, err := config.Load(ch.path)
+	if err != nil {
+		return nil, err
+	}
+	ch.mu.Lock()
+	ch.cfg = cfg
+	ch.mu.Unlock()
+	return cfg, nil
+}
+
 type session struct {
 	expiresAt time.Time
 }
@@ -74,7 +101,7 @@ func (s *sessionStore) remove(token string) {
 	delete(s.sessions, token)
 }
 
-func basicAuth(cfg *config.Config, store *sessionStore, next http.Handler) http.Handler {
+func basicAuth(ch *configHolder, store *sessionStore, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Check existing session cookie.
 		if cookie, err := r.Cookie(sessionCookieName); err == nil {
@@ -104,6 +131,7 @@ func basicAuth(cfg *config.Config, store *sessionStore, next http.Handler) http.
 		}
 
 		// No valid session — require Basic Auth.
+		cfg := ch.get()
 		user, pass, ok := r.BasicAuth()
 		if !ok ||
 			subtle.ConstantTimeCompare([]byte(user), []byte(cfg.Username)) != 1 ||

@@ -13,9 +13,10 @@ import (
 	"winctl/web"
 )
 
-func New(cfg *config.Config, st *state.State, sched *scheduler.Scheduler) *http.Server {
+func New(cfg *config.Config, configPath string, st *state.State, sched *scheduler.Scheduler) *http.Server {
 	store := newSessionStore(cfg.SessionTimeoutMinutes)
-	h := &handlers{state: st, scheduler: sched, sessions: store}
+	ch := newConfigHolder(cfg, configPath)
+	h := &handlers{state: st, scheduler: sched, sessions: store, config: ch}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", h.status)
@@ -25,6 +26,7 @@ func New(cfg *config.Config, st *state.State, sched *scheduler.Scheduler) *http.
 	mux.HandleFunc("/api/lock/schedule", h.lockSchedule)
 	mux.HandleFunc("/api/reset", h.reset)
 	mux.HandleFunc("/api/logout", h.logout)
+	mux.HandleFunc("/api/config/reload", h.configReload)
 
 	staticFS, err := fs.Sub(web.StaticFS, "static")
 	if err != nil {
@@ -34,7 +36,7 @@ func New(cfg *config.Config, st *state.State, sched *scheduler.Scheduler) *http.
 
 	return &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
-		Handler:      basicAuth(cfg, store, mux),
+		Handler:      basicAuth(ch, store, mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  60 * time.Second,

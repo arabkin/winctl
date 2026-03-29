@@ -13,6 +13,7 @@ type handlers struct {
 	state     *state.State
 	scheduler *scheduler.Scheduler
 	sessions  *sessionStore
+	config    *configHolder
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -108,4 +109,23 @@ func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   10,
 	})
 	writeJSON(w, map[string]string{"status": "logged out"})
+}
+
+func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	cfg, err := h.config.reload()
+	if err != nil {
+		log.Printf("config reload failed: %v", err)
+		writeJSON(w, map[string]string{"status": "config reload failed", "error": err.Error()})
+		return
+	}
+	h.scheduler.UpdateIntervals(
+		scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes},
+		scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes},
+	)
+	log.Println("configuration reloaded successfully")
+	writeJSON(w, map[string]string{"status": "configuration reloaded"})
 }

@@ -26,7 +26,7 @@ func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Sched
 	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
-	srv := New(cfg, st, sched)
+	srv := New(cfg, "", st, sched)
 	return srv, st, sched
 }
 
@@ -42,7 +42,7 @@ func setupTestServerWithTimeout(t *testing.T, timeoutMinutes int) *http.Server {
 	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
-	return New(cfg, st, sched)
+	return New(cfg, "", st, sched)
 }
 
 func authHeader() string {

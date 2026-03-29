@@ -61,7 +61,7 @@ func runForeground(dryRun bool, configFile string) {
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
 	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
 	sched := scheduler.New(ctx, st, dryRun, restartIvl, lockIvl)
-	srv := server.New(cfg, st, sched)
+	srv := server.New(cfg, configFile, st, sched)
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
