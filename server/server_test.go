@@ -17,7 +17,7 @@ import (
 func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Scheduler) {
 	t.Helper()
 	cfg := config.NewForTest(8443, "admin", "testpass")
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	noopExec := scheduler.ExecFuncs{
 		Restart:    func() error { return nil },
@@ -33,7 +33,7 @@ func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Sched
 func setupTestServerWithTimeout(t *testing.T, timeoutMinutes int) *http.Server {
 	t.Helper()
 	cfg := config.NewForTestWithTimeout(8443, "admin", "testpass", timeoutMinutes)
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	noopExec := scheduler.ExecFuncs{
 		Restart:    func() error { return nil },

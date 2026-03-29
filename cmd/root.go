@@ -57,7 +57,7 @@ func runForeground(dryRun bool, configFile string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	st := state.New()
+	st := state.New(dryRun)
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
 	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
 	sched := scheduler.New(ctx, st, dryRun, restartIvl, lockIvl)

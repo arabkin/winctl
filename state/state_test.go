@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewStateIsIdle(t *testing.T) {
-	s := New()
+	s := New(false)
 	st := s.Status()
 
 	if st.RestartScheduleActive {
@@ -28,7 +28,7 @@ func TestNewStateIsIdle(t *testing.T) {
 }
 
 func TestSetRestartSchedule(t *testing.T) {
-	s := New()
+	s := New(false)
 	now := time.Now()
 	s.SetRestartSchedule(true, &now)
 
@@ -51,7 +51,7 @@ func TestSetRestartSchedule(t *testing.T) {
 }
 
 func TestSetLockSchedule(t *testing.T) {
-	s := New()
+	s := New(false)
 	now := time.Now()
 	s.SetLockSchedule(true, &now)
 
@@ -65,7 +65,7 @@ func TestSetLockSchedule(t *testing.T) {
 }
 
 func TestSetRestartOnce(t *testing.T) {
-	s := New()
+	s := New(false)
 	at := time.Now().Add(60 * time.Second)
 	s.SetRestartOnce(true, &at)
 
@@ -79,7 +79,7 @@ func TestSetRestartOnce(t *testing.T) {
 }
 
 func TestSetLockOnce(t *testing.T) {
-	s := New()
+	s := New(false)
 	s.SetLockOnce(true, new(time.Now().Add(60*time.Second)))
 
 	st := s.Status()
@@ -89,7 +89,7 @@ func TestSetLockOnce(t *testing.T) {
 }
 
 func TestReset(t *testing.T) {
-	s := New()
+	s := New(false)
 	now := time.Now()
 	s.SetRestartSchedule(true, &now)
 	s.SetLockSchedule(true, &now)
@@ -111,7 +111,7 @@ func TestReset(t *testing.T) {
 }
 
 func TestConcurrentAccess(t *testing.T) {
-	s := New()
+	s := New(false)
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(3)

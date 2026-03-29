@@ -17,6 +17,16 @@ function formatCountdown(isoStr) {
 }
 
 function updateUI(data) {
+    // Mode badge
+    const modeBadge = document.getElementById("mode-badge");
+    if (data.dry_run) {
+        modeBadge.textContent = "Dry Run";
+        modeBadge.className = "badge badge-mode-dry";
+    } else {
+        modeBadge.textContent = "Real";
+        modeBadge.className = "badge badge-mode-real";
+    }
+
     // Restart schedule
     const rSched = document.getElementById("restart-schedule-status");
     if (data.restart_schedule_active) {

@@ -25,7 +25,7 @@ func testScheduler(ctx context.Context, st *state.State) *Scheduler {
 }
 
 func TestStartAndStopRestartSchedule(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -51,7 +51,7 @@ func TestStartAndStopRestartSchedule(t *testing.T) {
 }
 
 func TestStartRestartScheduleIdempotent(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -70,7 +70,7 @@ func TestStartRestartScheduleIdempotent(t *testing.T) {
 }
 
 func TestStopRestartScheduleWhenNotRunning(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -80,7 +80,7 @@ func TestStopRestartScheduleWhenNotRunning(t *testing.T) {
 }
 
 func TestStartAndStopLockSchedule(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -103,7 +103,7 @@ func TestStartAndStopLockSchedule(t *testing.T) {
 }
 
 func TestRestartOnce(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -121,7 +121,7 @@ func TestRestartOnce(t *testing.T) {
 }
 
 func TestRestartOnceIdempotent(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -137,7 +137,7 @@ func TestRestartOnceIdempotent(t *testing.T) {
 }
 
 func TestLockOnce(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -152,7 +152,7 @@ func TestLockOnce(t *testing.T) {
 }
 
 func TestResetAll(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -176,7 +176,7 @@ func TestResetAll(t *testing.T) {
 }
 
 func TestResetAllWhenNothingActive(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 	defer s.Stop()
@@ -186,7 +186,7 @@ func TestResetAllWhenNothingActive(t *testing.T) {
 }
 
 func TestStopCancelsSchedules(t *testing.T) {
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	s := testScheduler(ctx, st)
 
@@ -247,7 +247,7 @@ func TestExecFuncsCalled(t *testing.T) {
 
 	// We can't easily test the scheduled execution without waiting minutes,
 	// but we can verify the functions are wired correctly by checking the struct.
-	st := state.New()
+	st := state.New(false)
 	ctx := context.Background()
 	r, l := defaultIntervals()
 	s := NewWithExec(ctx, st, exec, r, l)

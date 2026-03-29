@@ -6,6 +6,7 @@ import (
 )
 
 type StatusDTO struct {
+	DryRun                bool       `json:"dry_run"`
 	RestartScheduleActive bool       `json:"restart_schedule_active"`
 	RestartNextAt         *time.Time `json:"restart_next_at"`
 	RestartPendingOnce    bool       `json:"restart_pending_once"`
@@ -18,6 +19,7 @@ type StatusDTO struct {
 
 type State struct {
 	mu                  sync.RWMutex
+	dryRun              bool
 	restartScheduleOn   bool
 	restartNextAt       *time.Time
 	restartPendingOnce  bool
@@ -28,14 +30,15 @@ type State struct {
 	lockOnceAt          *time.Time
 }
 
-func New() *State {
-	return &State{}
+func New(dryRun bool) *State {
+	return &State{dryRun: dryRun}
 }
 
 func (s *State) Status() StatusDTO {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return StatusDTO{
+		DryRun:                s.dryRun,
 		RestartScheduleActive: s.restartScheduleOn,
 		RestartNextAt:         s.restartNextAt,
 		RestartPendingOnce:    s.restartPendingOnce,
