@@ -53,14 +53,10 @@ test.describe('Dashboard load', () => {
 // ─── Auth ───
 
 test.describe('Authentication', () => {
-    test('API returns 401 without credentials', async ({ playwright }) => {
-        const context = await playwright.chromium.launchPersistentContext('', {
-            baseURL: `http://localhost:${process.env.WINCTL_PORT || '8443'}`,
-        });
-        const req = context.request;
-        const res = await req.fetch('/api/status');
-        expect(res.status()).toBe(401);
-        await context.close();
+    test('API returns 401 without credentials', async () => {
+        const port = process.env.WINCTL_PORT || '8443';
+        const res = await fetch(`http://localhost:${port}/api/status`);
+        expect(res.status).toBe(401);
     });
 });
 
