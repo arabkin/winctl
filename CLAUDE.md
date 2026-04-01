@@ -25,7 +25,7 @@ cd e2e && npm install && npx playwright install chromium && npx playwright test
 ## Project Structure
 
 - `main.go` — entry point, delegates to `cmd.Run()`
-- `cmd/` — CLI subcommands (install, uninstall, start, stop, run) with `//go:build windows` and `//go:build !windows` variants
+- `cmd/` — CLI subcommands (install, uninstall, upgrade, start, stop, run) with `//go:build windows` and `//go:build !windows` variants
 - `service/` — Windows `svc.Handler` implementation with build-tag stubs for non-Windows
 - `server/` — HTTP server (`server.go`), session-based auth with Basic Auth middleware (`auth.go`), REST handlers (`handlers.go`)
 - `scheduler/` — timer goroutines for scheduled/one-shot restart and lock actions; accepts injectable `ExecFuncs` for testability
@@ -75,4 +75,5 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 - Config validation rejects: port outside 1-65535, empty username/password, interval min < 1, max < min
 - `install` command is self-contained: creates service, starts it immediately, and adds Windows Firewall rule (private profile only)
 - `uninstall` removes both the service and the firewall rule
+- `upgrade` replaces the installed binary in-place: stops service → backs up old binary (.bak) → copies new binary → starts service; must be run from a different path than the installed binary
 - Server binds `0.0.0.0:<port>` (all interfaces); firewall rule restricts access to private/home networks

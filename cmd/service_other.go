@@ -19,3 +19,7 @@ func startService() {
 func stopService() {
 	fmt.Println("Service stop is only supported on Windows.")
 }
+
+func upgradeService() {
+	fmt.Println("Service upgrade is only supported on Windows.")
+}

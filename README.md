@@ -113,10 +113,11 @@ All service commands require an **elevated (Administrator)** command prompt.
 # Install, start, and configure firewall (one command)
 winctl.exe install
 
+# Upgrade: download new winctl.exe, then run from the download location
+new-winctl.exe upgrade    # stops service → replaces binary → starts service
+
 # Start/stop manually if needed
 winctl.exe start
-
-# Stop the service
 winctl.exe stop
 
 # Remove the service (also removes firewall rule)
@@ -124,6 +125,8 @@ winctl.exe uninstall
 ```
 
 The install command does three things: creates the service (auto-start on boot), starts it immediately, and adds a Windows Firewall inbound rule for the configured port on **private networks only**. The service appears as **WinCtl Service** in `services.msc`. The uninstall command removes both the service and the firewall rule.
+
+The **upgrade** command replaces the installed binary without touching the service registration, config, or firewall rule. Run the new binary from a different location (e.g. Downloads) — it looks up the installed path from the service manager, stops the service, copies itself over, creates a `.bak` backup, and restarts.
 
 #### Screen lock note
 
@@ -318,7 +321,7 @@ winctl/
 ├── config.json              # Auto-created on first run (not committed)
 ├── cmd/
 │   ├── root.go              # CLI dispatch, foreground mode, signal handling
-│   ├── service_windows.go   # Windows service + firewall rule management
+│   ├── service_windows.go   # Windows service, firewall, and upgrade management
 │   └── service_other.go     # Stub for non-Windows platforms
 ├── service/
 │   ├── service_windows.go   # Windows svc.Handler implementation

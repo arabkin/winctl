@@ -36,6 +36,8 @@ func Run() {
 		startService()
 	case "stop":
 		stopService()
+	case "upgrade":
+		upgradeService()
 	case "run":
 		runFlags := flag.NewFlagSet("run", flag.ExitOnError)
 		dryRun := runFlags.Bool("dry-run", false, "simulate actions without executing them")
@@ -90,8 +92,9 @@ func printUsage() {
 	fmt.Println("Usage: winctl <command>")
 	fmt.Println()
 	fmt.Println("Commands:")
-	fmt.Println("  install    Install as Windows service")
-	fmt.Println("  uninstall  Remove Windows service")
+	fmt.Println("  install    Install as Windows service (starts it and creates firewall rule)")
+	fmt.Println("  uninstall  Remove Windows service and firewall rule")
+	fmt.Println("  upgrade    Replace installed binary with this one (stop → copy → start)")
 	fmt.Println("  start      Start the Windows service")
 	fmt.Println("  stop       Stop the Windows service")
 	fmt.Println("  run        Run in foreground (debug mode)")

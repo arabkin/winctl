@@ -4,9 +4,12 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"time"
 	"winctl/config"
 	"winctl/service"
 
@@ -128,6 +131,101 @@ func startService() {
 		log.Fatalf("failed to start service: %v", err)
 	}
 	fmt.Printf("Service %q started.\n", service.ServiceName)
+}
+
+func upgradeService() {
+	m, err := mgr.Connect()
+	if err != nil {
+		log.Fatalf("failed to connect to service manager: %v", err)
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(service.ServiceName)
+	if err != nil {
+		log.Fatalf("service %q not found — is it installed?: %v", service.ServiceName, err)
+	}
+
+	// Get the installed binary path from the service config.
+	cfg, err := s.Config()
+	if err != nil {
+		s.Close()
+		log.Fatalf("failed to read service config: %v", err)
+	}
+	installedPath := cfg.BinaryPathName
+
+	newPath, err := os.Executable()
+	if err != nil {
+		s.Close()
+		log.Fatalf("failed to get current executable path: %v", err)
+	}
+	newPath, _ = filepath.Abs(newPath)
+	installedPath, _ = filepath.Abs(installedPath)
+
+	if newPath == installedPath {
+		s.Close()
+		log.Fatalf("new binary is the same as installed binary — run upgrade from a different location")
+	}
+
+	// Stop the service.
+	fmt.Println("Stopping service...")
+	_, err = s.Control(svc.Stop)
+	s.Close()
+	if err != nil {
+		log.Printf("warning: could not stop service (may already be stopped): %v", err)
+	}
+	// Wait for the process to release the file.
+	time.Sleep(2 * time.Second)
+
+	// Back up the old binary.
+	backupPath := installedPath + ".bak"
+	if err := copyFile(installedPath, backupPath); err != nil {
+		log.Printf("warning: could not create backup at %s: %v", backupPath, err)
+	} else {
+		fmt.Printf("Backed up old binary to %s\n", backupPath)
+	}
+
+	// Copy new binary over the installed one.
+	if err := copyFile(newPath, installedPath); err != nil {
+		log.Fatalf("failed to copy new binary to %s: %v\nRestore from backup: %s", installedPath, err, backupPath)
+	}
+	fmt.Printf("Updated binary at %s\n", installedPath)
+
+	// Re-open service and start it.
+	m2, err := mgr.Connect()
+	if err != nil {
+		log.Fatalf("binary replaced but failed to reconnect to service manager: %v — start manually", err)
+	}
+	defer m2.Disconnect()
+
+	s2, err := m2.OpenService(service.ServiceName)
+	if err != nil {
+		log.Fatalf("binary replaced but failed to open service: %v — start manually", err)
+	}
+	defer s2.Close()
+
+	if err := s2.Start(); err != nil {
+		log.Fatalf("binary replaced but failed to start service: %v — start manually", err)
+	}
+	fmt.Printf("Service %q upgraded and started.\n", service.ServiceName)
+}
+
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
 }
 
 func stopService() {
