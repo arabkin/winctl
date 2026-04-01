@@ -16,6 +16,8 @@ The service runs silently in the background (no system tray icon) and is only vi
 - **Web dashboard** with live status polling (2s interval), mode indicator (dry-run / real), and config viewer
 - **REST API** for programmatic control
 - **Dry-run mode** (`-d` / `--dry-run`) — simulates all actions without executing them; visible in dashboard
+- **Toast notifications** in the web dashboard for action confirmations and errors
+- **Windows Firewall rule** — install command creates an inbound rule for private (home) networks only
 
 ## Prerequisites
 
@@ -93,8 +95,8 @@ The config file is written with `0600` permissions (owner read/write only).
 ./bin/winctl run --dry-run      # same as -d
 ```
 
-Opens the HTTP server on the configured port. Stop with `Ctrl+C`.
-Visit `http://localhost:8443` and enter your credentials when prompted.
+Opens the HTTP server on `0.0.0.0:<port>` (all interfaces). Stop with `Ctrl+C`.
+Visit `http://localhost:8443` (or the machine's IP from another device) and enter your credentials when prompted.
 
 In dry-run mode, all restart and lock actions are simulated — the app logs what it would do but does not execute any OS commands:
 
@@ -108,20 +110,20 @@ In dry-run mode, all restart and lock actions are simulated — the app logs wha
 All service commands require an **elevated (Administrator)** command prompt.
 
 ```bash
-# Install as auto-start Windows service
+# Install, start, and configure firewall (one command)
 winctl.exe install
 
-# Start the service
+# Start/stop manually if needed
 winctl.exe start
 
 # Stop the service
 winctl.exe stop
 
-# Remove the service
+# Remove the service (also removes firewall rule)
 winctl.exe uninstall
 ```
 
-After install, the service starts automatically on boot. It appears as **WinCtl Service** in `services.msc`.
+The install command does three things: creates the service (auto-start on boot), starts it immediately, and adds a Windows Firewall inbound rule for the configured port on **private networks only**. The service appears as **WinCtl Service** in `services.msc`. The uninstall command removes both the service and the firewall rule.
 
 #### Screen lock note
 
@@ -132,6 +134,41 @@ sc config WinCtlSvc obj= ".\yourusername" password= "yourpassword"
 ```
 
 Restart the service after changing the account.
+
+#### Network access (home network only)
+
+The server listens on `0.0.0.0:<port>` (all interfaces). The install command automatically creates a Windows Firewall rule that allows inbound connections on the configured port for **private (home) networks only** — public network connections are blocked.
+
+If you need to configure the firewall rule manually:
+
+```cmd
+:: Add rule (private networks only)
+netsh advfirewall firewall add rule name="WinCtl Dashboard" dir=in action=allow protocol=TCP localport=8443 profile=private
+
+:: Verify the rule exists
+netsh advfirewall firewall show rule name="WinCtl Dashboard"
+
+:: Remove rule
+netsh advfirewall firewall delete rule name="WinCtl Dashboard"
+```
+
+**Important:** Your home network must be set to "Private" profile in Windows for this to work. Verify and change it at:
+
+```
+Settings > Network & Internet > your connection > Network profile type > Private
+```
+
+You can verify the current profile via PowerShell:
+
+```powershell
+Get-NetConnectionProfile
+```
+
+Look for `NetworkCategory: Private` on your home adapter. If it shows `Public`, change it:
+
+```powershell
+Set-NetConnectionProfile -InterfaceAlias "Wi-Fi" -NetworkCategory Private
+```
 
 ### Dry-run mode for E2E testing
 
@@ -225,14 +262,14 @@ curl -u admin:changeme -X POST http://localhost:8443/api/reset
 go test ./... -v
 ```
 
-Runs 64 tests across 4 packages:
+Runs 73 tests across 4 packages:
 
 | Package | Tests | What's covered |
 |---------|-------|----------------|
 | `config` | 12 | Defaults, save/load, file permissions, invalid JSON, invalid base64, port/username/interval validation |
 | `state` | 7 | State operations, reset, concurrent access |
 | `scheduler` | 14 | Start/stop schedules, one-shots, idempotency, reset, cancellation, random interval range |
-| `server` | 31 | Auth (accept/reject), sessions, logout, all API endpoints, method validation, JSON shape, static files |
+| `server` | 40 | Auth (accept/reject), sessions (creation, expiry, concurrency), logout (cookie, re-auth flow), all API endpoints, method validation, JSON shape, static files, config get/reload, idempotent schedule enable/disable |
 
 The scheduler tests use mock executor functions — no real `shutdown` or `rundll32` commands are executed.
 
@@ -251,7 +288,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-Runs 27 tests covering:
+Runs 25 tests covering:
 
 - Dashboard loading, title, sections, buttons
 - Authentication (401 without credentials)
@@ -274,42 +311,46 @@ Configure with environment variables:
 
 ```
 winctl/
-├── main.go                  # Entry point
-├── go.mod
-├── config.json              # Default config (auto-created on first run)
+├── main.go                  # Entry point, delegates to cmd.Run()
+├── go.mod / go.sum
+├── Makefile                 # Build, test, run, e2e targets
+├── CLAUDE.md                # Project conventions for AI assistants
+├── config.json              # Auto-created on first run (not committed)
 ├── cmd/
-│   ├── root.go              # CLI dispatch and foreground mode
-│   ├── service_windows.go   # Windows service management (install/start/stop/uninstall)
+│   ├── root.go              # CLI dispatch, foreground mode, signal handling
+│   ├── service_windows.go   # Windows service + firewall rule management
 │   └── service_other.go     # Stub for non-Windows platforms
 ├── service/
 │   ├── service_windows.go   # Windows svc.Handler implementation
 │   └── service_other.go     # Stub for non-Windows platforms
 ├── server/
 │   ├── server.go            # HTTP server setup and routing
-│   ├── auth.go              # Basic auth middleware
+│   ├── auth.go              # Basic auth + session cookie middleware
 │   ├── handlers.go          # REST API handlers
-│   └── server_test.go       # API and auth tests
+│   └── server_test.go       # API, auth, session, and config tests (40 tests)
 ├── scheduler/
 │   ├── scheduler.go         # Timer goroutines for scheduled actions
-│   └── scheduler_test.go    # Scheduler tests with mock executors
+│   └── scheduler_test.go    # Scheduler tests with mock executors (14 tests)
 ├── executor/
-│   └── executor.go          # OS command wrappers (shutdown, lock)
+│   └── executor.go          # OS command wrappers (shutdown, lock, dry-run variants)
 ├── config/
-│   ├── config.go            # Config loading with base64 password
-│   ├── config_test.go       # Config tests
-│   └── testing.go           # Test helper for creating configs
+│   ├── config.go            # JSON config loader with base64 password, validation
+│   ├── config_test.go       # Config tests (12 tests)
+│   └── testing.go           # NewForTest() helper
 ├── state/
-│   ├── state.go             # Thread-safe in-memory state
-│   └── state_test.go        # State tests
+│   ├── state.go             # Thread-safe in-memory state with RWMutex
+│   └── state_test.go        # State tests (7 tests)
 ├── web/
 │   ├── embed.go             # go:embed directive
 │   └── static/
-│       ├── index.html       # Dashboard
-│       ├── style.css         # Styles
-│       └── app.js           # Status polling and UI updates
+│       ├── index.html       # Dashboard UI
+│       ├── style.css        # Styles
+│       └── app.js           # Status polling, UI updates, toast notifications
+├── docs/
+│   └── plan.md              # Implementation plan
 └── e2e/
     ├── package.json
     ├── playwright.config.ts
     └── tests/
-        └── dashboard.spec.ts # Playwright E2E tests
+        └── dashboard.spec.ts # Playwright E2E tests (25 tests)
 ```

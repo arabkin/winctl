@@ -15,7 +15,7 @@ GOOS=windows GOARCH=amd64 go build -o bin/winctl.exe .       # Windows cross-com
 ## Test
 
 ```bash
-# Go tests (64 tests across config, state, scheduler, server packages)
+# Go tests (73 tests across config, state, scheduler, server packages)
 go test ./... -v
 
 # Playwright E2E (requires server running on localhost:8443)
@@ -73,3 +73,6 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 - Config reload updates credentials and intervals; port changes require restart
 - State is in-memory only — schedules do not persist across service restarts
 - Config validation rejects: port outside 1-65535, empty username/password, interval min < 1, max < min
+- `install` command is self-contained: creates service, starts it immediately, and adds Windows Firewall rule (private profile only)
+- `uninstall` removes both the service and the firewall rule
+- Server binds `0.0.0.0:<port>` (all interfaces); firewall rule restricts access to private/home networks

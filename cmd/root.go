@@ -80,7 +80,7 @@ func runForeground(dryRun bool, configFile string) {
 	if dryRun {
 		mode = " [DRY RUN]"
 	}
-	log.Printf("WinCtl running on http://localhost:%d (user: %s)%s", cfg.Port, cfg.Username, mode)
+	log.Printf("WinCtl running on http://0.0.0.0:%d (user: %s)%s", cfg.Port, cfg.Username, mode)
 	if err := server.Run(srv, ctx); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
