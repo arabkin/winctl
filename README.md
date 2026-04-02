@@ -12,6 +12,7 @@ The service runs silently in the background (no system tray icon) and is only vi
 - **Reset all** — cancel everything and return the machine to normal
 - **Session-based auth** with Basic Auth login, session cookies, and logout support
 - **Auto-creates config** on first run with sensible defaults; validated on load
+- **Persistent schedules** — active schedules survive service restarts (saved to `state.json`)
 - **Hot config reload** — reload credentials and intervals via API without restarting
 - **Web dashboard** with live status polling (2s interval), mode indicator (dry-run / real), and config viewer
 - **REST API** for programmatic control
@@ -19,9 +20,25 @@ The service runs silently in the background (no system tray icon) and is only vi
 - **Toast notifications** in the web dashboard for action confirmations and errors
 - **Windows Firewall rule** — install command creates an inbound rule for private (home) networks only
 
+## How actions work
+
+**Restart** has a two-stage countdown:
+
+1. **App countdown (60s)** — shown in the dashboard as a pending timer. During this stage the restart can still be cancelled via Reset All.
+2. **Windows countdown (60s)** — once the app timer fires, `shutdown /r /t 60` is issued. Windows shows a "You're about to be signed out" notification with a 1-minute warning. This stage cannot be cancelled from the dashboard (use `shutdown /a` in a terminal to abort).
+
+Total time from button press to actual restart: **~2 minutes**.
+
+**Screen lock** has a single stage:
+
+1. **App countdown (60s)** — same dashboard timer, cancellable via Reset All.
+2. **Immediate lock** — when the timer fires, the screen locks instantly (`rundll32 LockWorkStation`). No additional delay or notification.
+
+For **scheduled** (recurring) actions, the app picks a random interval within the configured min/max range. When the interval elapses, the action fires immediately — no additional app countdown. For restart, the Windows 60-second shutdown notice still applies.
+
 ## Prerequisites
 
-- Go 1.22+ ([download](https://go.dev/dl/))
+- Go 1.26+ ([download](https://go.dev/dl/))
 - Windows (for service install/lock screen features)
 - Node.js 18+ (for Playwright E2E tests only)
 
@@ -133,11 +150,10 @@ The **upgrade** command replaces the installed binary without touching the servi
 The `LockWorkStation` command only works when the service runs under an interactive user account, not `SYSTEM`. To configure this:
 
 ```cmd
-sc config WinCtlSvc obj= ".\yourusername" password= "yourpassword"
+sc.exe config WinCtlSvc obj= ".\yourusername" password= "yourpassword"
 ```
 
 Restart the service after changing the account.
-
 #### Network access (home network only)
 
 The server listens on `0.0.0.0:<port>` (all interfaces). The install command automatically creates a Windows Firewall rule that allows inbound connections on the configured port for **private (home) networks only** — public network connections are blocked.
@@ -265,12 +281,12 @@ curl -u admin:changeme -X POST http://localhost:8443/api/reset
 go test ./... -v
 ```
 
-Runs 73 tests across 4 packages:
+Runs 80 tests across 4 packages:
 
 | Package | Tests | What's covered |
 |---------|-------|----------------|
 | `config` | 12 | Defaults, save/load, file permissions, invalid JSON, invalid base64, port/username/interval validation |
-| `state` | 7 | State operations, reset, concurrent access |
+| `state` | 14 | State operations, reset, concurrent access, intent persistence (save/load, missing file, invalid JSON, file permissions), onChange callback |
 | `scheduler` | 14 | Start/stop schedules, one-shots, idempotency, reset, cancellation, random interval range |
 | `server` | 40 | Auth (accept/reject), sessions (creation, expiry, concurrency), logout (cookie, re-auth flow), all API endpoints, method validation, JSON shape, static files, config get/reload, idempotent schedule enable/disable |
 
@@ -342,7 +358,9 @@ winctl/
 │   └── testing.go           # NewForTest() helper
 ├── state/
 │   ├── state.go             # Thread-safe in-memory state with RWMutex
-│   └── state_test.go        # State tests (7 tests)
+│   ├── persist.go           # Schedule intent persistence (state.json)
+│   ├── persist_test.go      # Persistence tests
+│   └── state_test.go        # State tests (14 tests)
 ├── web/
 │   ├── embed.go             # go:embed directive
 │   └── static/

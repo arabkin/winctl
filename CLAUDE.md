@@ -15,7 +15,7 @@ GOOS=windows GOARCH=amd64 go build -o bin/winctl.exe .       # Windows cross-com
 ## Test
 
 ```bash
-# Go tests (73 tests across config, state, scheduler, server packages)
+# Go tests (80 tests across config, state, scheduler, server packages)
 go test ./... -v
 
 # Playwright E2E (requires server running on localhost:8443)
@@ -71,7 +71,7 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 - Screen lock (`rundll32 LockWorkStation`) requires service to run under a user account, not SYSTEM
 - `shutdown /r /t 60` works from any session including SYSTEM
 - Config reload updates credentials and intervals; port changes require restart
-- State is in-memory only — schedules do not persist across service restarts
+- Schedule intent (which schedules are enabled) persists to `state.json` next to `config.json`; restored on startup. One-shot timers are not persisted.
 - Config validation rejects: port outside 1-65535, empty username/password, interval min < 1, max < min
 - `install` command is self-contained: creates service, starts it immediately, and adds Windows Firewall rule (private profile only)
 - `uninstall` removes both the service and the firewall rule
