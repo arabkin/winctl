@@ -100,9 +100,25 @@ func TestCheckHandlesAPIError(t *testing.T) {
 	defer srv.Close()
 
 	u := New("1.0.2", srv.URL)
+	info, err := u.Check()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.Available {
+		t.Fatal("expected no update available for 404")
+	}
+}
+
+func TestCheckHandlesServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+
+	u := New("1.0.2", srv.URL)
 	_, err := u.Check()
 	if err == nil {
-		t.Fatal("expected error for 404 response")
+		t.Fatal("expected error for 500 response")
 	}
 }
 

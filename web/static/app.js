@@ -109,7 +109,8 @@ function updateUI(data) {
     // Restart schedule
     const rSched = document.getElementById("restart-schedule-status");
     if (data.restart_schedule_active) {
-        rSched.textContent = "Active — next in " + formatCountdown(data.restart_next_at);
+        var rCountdown = formatCountdown(data.restart_next_at);
+        rSched.textContent = rCountdown ? "Active — next in " + rCountdown : "Active — scheduling...";
         rSched.style.color = "#b7e4c7";
     } else {
         rSched.textContent = "Idle";
@@ -129,7 +130,8 @@ function updateUI(data) {
     // Lock schedule
     const lSched = document.getElementById("lock-schedule-status");
     if (data.lock_schedule_active) {
-        lSched.textContent = "Active — next in " + formatCountdown(data.lock_next_at);
+        var lCountdown = formatCountdown(data.lock_next_at);
+        lSched.textContent = lCountdown ? "Active — next in " + lCountdown : "Active — scheduling...";
         lSched.style.color = "#b7e4c7";
     } else {
         lSched.textContent = "Idle";

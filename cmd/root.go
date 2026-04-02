@@ -102,6 +102,7 @@ func runForeground(dryRun bool, configFile string) {
 	go func() {
 		<-sigCh
 		log.Println("shutting down...")
+		st.SetOnChange(nil) // disconnect persistence before stopping scheduler
 		sched.Stop()
 		cancel()
 		// Second signal force-exits immediately.
