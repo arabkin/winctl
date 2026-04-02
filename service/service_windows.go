@@ -85,6 +85,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 		case svc.Stop, svc.Shutdown:
 			log.Println("service stopping")
 			status <- svc.Status{State: svc.StopPending}
+			st.SetOnChange(nil) // disconnect persistence before stopping scheduler
 			sched.Stop()
 			cancel()
 			<-serverDone
