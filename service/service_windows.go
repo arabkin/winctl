@@ -5,10 +5,12 @@ package service
 import (
 	"context"
 	"log"
+	"time"
 	"winctl/config"
 	"winctl/scheduler"
 	"winctl/server"
 	"winctl/state"
+	"winctl/updater"
 
 	"golang.org/x/sys/windows/svc"
 )
@@ -55,11 +57,34 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 		sched.StartLockSchedule()
 	}
 
-	srv := server.New(cfg, configPath, st, sched)
+	upd := updater.New("1.0.2", "")
+	srv := server.New(cfg, configPath, st, sched, upd)
 
 	go func() {
 		if err := server.Run(srv, ctx); err != nil {
 			log.Printf("server error: %v", err)
+		}
+	}()
+
+	go func() {
+		if info, err := upd.Check(); err != nil {
+			log.Printf("update check: %v", err)
+		} else if info.Available {
+			log.Printf("update available: v%s", info.Version)
+		}
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if info, err := upd.Check(); err != nil {
+					log.Printf("update check: %v", err)
+				} else if info.Available {
+					log.Printf("update available: v%s", info.Version)
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 

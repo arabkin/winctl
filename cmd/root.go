@@ -8,12 +8,16 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 	"winctl/config"
 	"winctl/scheduler"
 	"winctl/server"
 	"winctl/service"
 	"winctl/state"
+	"winctl/updater"
 )
+
+var AppVersion = "1.0.2"
 
 func Run() {
 	if len(os.Args) < 2 {
@@ -81,10 +85,33 @@ func runForeground(dryRun bool, configFile string) {
 		sched.StartLockSchedule()
 	}
 
-	srv := server.New(cfg, configFile, st, sched)
+	upd := updater.New(AppVersion, "")
+	srv := server.New(cfg, configFile, st, sched, upd)
 	defer func() {
 		if err := srv.Close(); err != nil {
 			log.Printf("server close: %v", err)
+		}
+	}()
+
+	go func() {
+		if info, err := upd.Check(); err != nil {
+			log.Printf("update check: %v", err)
+		} else if info.Available {
+			log.Printf("update available: v%s", info.Version)
+		}
+		ticker := time.NewTicker(6 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if info, err := upd.Check(); err != nil {
+					log.Printf("update check: %v", err)
+				} else if info.Available {
+					log.Printf("update available: v%s", info.Version)
+				}
+			case <-ctx.Done():
+				return
+			}
 		}
 	}()
 

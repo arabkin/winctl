@@ -96,3 +96,18 @@ button:active { transform: scale(0.97); }
 .toast.hidden { opacity: 0; pointer-events: none; }
 .toast-error { background: #6a2d2d; color: #e4b7b7; }
 .toast-ok { background: #2d6a4f; color: #b7e4c7; }
+
+.card-upgrade { border-color: #b5830a; }
+.btn-upgrade { background: #b5830a; width: 100%; }
+.btn-upgrade:hover { background: #d4a017; }
+.upgrade-body {
+    background: #1a1a2e;
+    border-radius: 6px;
+    padding: 0.75rem;
+    margin: 0.5rem 0;
+    font-size: 0.85rem;
+    color: #8899aa;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+}
