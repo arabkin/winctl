@@ -38,6 +38,7 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s := h.state.Status()
+	upd := h.updater.Cached()
 	writeJSON(w, map[string]any{
 		"version":                 h.version,
 		"dry_run":                 s.DryRun,
@@ -49,6 +50,8 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 		"lock_next_at":            s.LockNextAt,
 		"lock_pending_once":       s.LockPendingOnce,
 		"lock_once_at":            s.LockOnceAt,
+		"update_available":        upd.Available,
+		"update_version":          upd.Version,
 	})
 }
 
