@@ -5,7 +5,6 @@ package service
 import (
 	"context"
 	"log"
-	"time"
 	"winctl/config"
 	"winctl/scheduler"
 	"winctl/server"
