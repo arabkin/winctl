@@ -16,7 +16,7 @@ import (
 	"winctl/updater"
 )
 
-var AppVersion = "1.1.0"
+var AppVersion = "1.1.1"
 
 func Run() {
 	if len(os.Args) < 2 {
@@ -88,7 +88,7 @@ func runForeground(dryRun bool, configFile string) {
 	}
 
 	upd := updater.New(AppVersion, "")
-	srv := server.New(cfg, configFile, st, sched, upd)
+	srv := server.New(cfg, configFile, st, sched, upd, AppVersion)
 	defer func() {
 		if err := srv.Close(); err != nil {
 			log.Printf("server close: %v", err)

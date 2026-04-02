@@ -34,7 +34,7 @@ function fetchConfig() {
             document.getElementById("cfg-restart-interval").textContent = data.restart_min_minutes + " - " + data.restart_max_minutes + " min";
             document.getElementById("cfg-lock-interval").textContent = data.lock_min_minutes + " - " + data.lock_max_minutes + " min";
         })
-        .catch(err => {
+        .catch(function() {
             showToast("Failed to load config", "error");
         });
 }
@@ -50,7 +50,7 @@ function reloadConfig() {
             showToast("Configuration reloaded", "ok");
             fetchConfig();
         })
-        .catch(err => {
+        .catch(function() {
             showToast("Config reload failed", "error");
         });
 }
@@ -73,6 +73,11 @@ function formatCountdown(isoStr) {
 }
 
 function updateUI(data) {
+    // Version badge
+    if (data.version) {
+        document.getElementById("version-badge").textContent = "v" + data.version;
+    }
+
     // Mode badge
     const modeBadge = document.getElementById("mode-badge");
     if (data.dry_run) {

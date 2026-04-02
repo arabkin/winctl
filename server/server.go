@@ -14,11 +14,11 @@ import (
 	"winctl/web"
 )
 
-func New(cfg *config.Config, configPath string, st *state.State, sched *scheduler.Scheduler, upd *updater.Updater) *http.Server {
+func New(cfg *config.Config, configPath string, st *state.State, sched *scheduler.Scheduler, upd *updater.Updater, version string) *http.Server {
 	store := newSessionStore(cfg.SessionTimeoutMinutes)
 	ch := newConfigHolder(cfg, configPath)
 	tracker := &loginTracker{}
-	h := &handlers{state: st, scheduler: sched, sessions: store, config: ch, updater: upd}
+	h := &handlers{state: st, scheduler: sched, sessions: store, config: ch, updater: upd, version: version}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", h.status)
