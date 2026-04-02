@@ -19,6 +19,9 @@ The service runs silently in the background (no system tray icon) and is only vi
 - **Dry-run mode** (`-d` / `--dry-run`) — simulates all actions without executing them; visible in dashboard
 - **Toast notifications** in the web dashboard for action confirmations and errors
 - **Windows Firewall rule** — install command creates an inbound rule for private (home) networks only
+- **Auto-update detection** — checks GitHub releases on startup and periodically; dashboard shows Upgrade card when a new version is available
+- **In-app upgrade** — download, SHA256 verify, and replace binary from the dashboard
+- **Login lockout** — locks authentication after 3 failed attempts (service restart to unlock); all login attempts are logged
 
 ## How actions work
 
@@ -229,6 +232,9 @@ All endpoints require Basic Auth. Responses are JSON.
 | `GET` | `/api/config` | Current configuration (excludes password) |
 | `POST` | `/api/config/reload` | Reload config from disk (updates auth + intervals) |
 | `POST` | `/api/logout` | Invalidate session and force re-authentication |
+| `GET` | `/api/update/status` | Cached update check result |
+| `POST` | `/api/update/check` | Force check for updates |
+| `POST` | `/api/update/apply` | Download, verify, and apply update |
 
 ### Example
 
@@ -281,14 +287,15 @@ curl -u admin:changeme -X POST http://localhost:8443/api/reset
 go test ./... -v
 ```
 
-Runs 80 tests across 4 packages:
+Runs 100 tests across 5 packages:
 
 | Package | Tests | What's covered |
 |---------|-------|----------------|
 | `config` | 12 | Defaults, save/load, file permissions, invalid JSON, invalid base64, port/username/interval validation |
 | `state` | 14 | State operations, reset, concurrent access, intent persistence (save/load, missing file, invalid JSON, file permissions), onChange callback |
 | `scheduler` | 14 | Start/stop schedules, one-shots, idempotency, reset, cancellation, random interval range |
-| `server` | 40 | Auth (accept/reject), sessions (creation, expiry, concurrency), logout (cookie, re-auth flow), all API endpoints, method validation, JSON shape, static files, config get/reload, idempotent schedule enable/disable |
+| `server` | 45 | Auth (accept/reject), sessions (creation, expiry, concurrency), logout (cookie, re-auth flow), login lockout, all API endpoints, method validation, JSON shape, static files, config get/reload, update status/check, idempotent schedule enable/disable |
+| `updater` | 15 | Release check (newer/same/older), API errors, missing asset, download with SHA256 verify, SHA256 mismatch, HTTP errors, version comparison |
 
 The scheduler tests use mock executor functions — no real `shutdown` or `rundll32` commands are executed.
 
@@ -367,6 +374,10 @@ winctl/
 │       ├── index.html       # Dashboard UI
 │       ├── style.css        # Styles
 │       └── app.js           # Status polling, UI updates, toast notifications
+├── version.go               # Application version constant
+├── updater/
+│   ├── updater.go           # GitHub release checker, download, SHA256 verify
+│   └── updater_test.go      # Updater tests (15 tests)
 ├── docs/
 │   └── plan.md              # Implementation plan
 └── e2e/

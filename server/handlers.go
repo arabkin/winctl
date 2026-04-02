@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"winctl/scheduler"
 	"winctl/state"
+	"winctl/updater"
 )
 
 type handlers struct {
@@ -14,6 +15,7 @@ type handlers struct {
 	scheduler *scheduler.Scheduler
 	sessions  *sessionStore
 	config    *configHolder
+	updater   *updater.Updater
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -22,11 +24,11 @@ func writeJSON(w http.ResponseWriter, v any) {
 		log.Printf("error: failed to encode JSON response: %v", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal server error"}`))
+		_, _ = w.Write([]byte(`{"error":"internal server error"}`))
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(buf.Bytes())
+	_, _ = w.Write(buf.Bytes())
 }
 
 func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
@@ -120,13 +122,13 @@ func (h *handlers) configGet(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := h.config.get()
 	writeJSON(w, map[string]any{
-		"port":                   cfg.Port,
-		"username":               cfg.Username,
+		"port":                    cfg.Port,
+		"username":                cfg.Username,
 		"session_timeout_minutes": cfg.SessionTimeoutMinutes,
-		"restart_min_minutes":    cfg.RestartMinMinutes,
-		"restart_max_minutes":    cfg.RestartMaxMinutes,
-		"lock_min_minutes":       cfg.LockMinMinutes,
-		"lock_max_minutes":       cfg.LockMaxMinutes,
+		"restart_min_minutes":     cfg.RestartMinMinutes,
+		"restart_max_minutes":     cfg.RestartMaxMinutes,
+		"lock_min_minutes":        cfg.LockMinMinutes,
+		"lock_max_minutes":        cfg.LockMaxMinutes,
 	})
 }
 
@@ -148,4 +150,49 @@ func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 	h.sessions.updateTimeout(cfg.SessionTimeoutMinutes)
 	log.Println("configuration reloaded successfully")
 	writeJSON(w, map[string]string{"status": "configuration reloaded"})
+}
+
+func (h *handlers) updateStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	writeJSON(w, h.updater.Cached())
+}
+
+func (h *handlers) updateCheck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	info, err := h.updater.Check()
+	if err != nil {
+		log.Printf("update check failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, map[string]string{"error": "update check failed: " + err.Error()})
+		return
+	}
+	writeJSON(w, info)
+}
+
+func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	info := h.updater.Cached()
+	if !info.Available {
+		w.WriteHeader(http.StatusConflict)
+		writeJSON(w, map[string]string{"status": "no update available"})
+		return
+	}
+	tmpPath, err := h.updater.Download(info)
+	if err != nil {
+		log.Printf("update download failed: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, map[string]string{"error": "download failed: " + err.Error()})
+		return
+	}
+	log.Printf("update downloaded to %s, initiating upgrade to %s", tmpPath, info.Version)
+	writeJSON(w, map[string]string{"status": "downloaded", "version": info.Version})
 }

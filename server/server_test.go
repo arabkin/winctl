@@ -13,6 +13,7 @@ import (
 	"winctl/config"
 	"winctl/scheduler"
 	"winctl/state"
+	"winctl/updater"
 )
 
 func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Scheduler) {
@@ -27,7 +28,8 @@ func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Sched
 	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
-	srv := New(cfg, "", st, sched)
+	upd := updater.New("1.0.0", "")
+	srv := New(cfg, "", st, sched, upd)
 	return srv, st, sched
 }
 
@@ -43,7 +45,8 @@ func setupTestServerWithTimeout(t *testing.T, timeoutMinutes int) *http.Server {
 	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
-	return New(cfg, "", st, sched)
+	upd := updater.New("1.0.0", "")
+	return New(cfg, "", st, sched, upd)
 }
 
 func authHeader() string {
@@ -252,7 +255,7 @@ func TestConcurrentSessionCreation(t *testing.T) {
 	srv, _, _ := setupTestServer(t)
 	var wg sync.WaitGroup
 	cookies := make([]*http.Cookie, 50)
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -714,9 +717,12 @@ func TestConfigReloadWithBadPathReturns500(t *testing.T) {
 	// Write invalid JSON to a real file so Load() fails at parse time.
 	dir := t.TempDir()
 	path := dir + "/config.json"
-	os.WriteFile(path, []byte("{invalid json"), 0600)
+	if err := os.WriteFile(path, []byte("{invalid json"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
-	srv := New(cfg, path, st, sched)
+	upd := updater.New("1.0.0", "")
+	srv := New(cfg, path, st, sched, upd)
 	w := doRequest(srv.Handler, "POST", "/api/config/reload", authHeader())
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for reload with bad config, got %d", w.Code)
@@ -744,14 +750,17 @@ func TestConfigReloadWithValidConfig(t *testing.T) {
 		t.Fatalf("failed to write test config: %v", err)
 	}
 
-	srv := New(cfg, path, st, sched)
+	upd := updater.New("1.0.0", "")
+	srv := New(cfg, path, st, sched, upd)
 	w := doRequest(srv.Handler, "POST", "/api/config/reload", authHeader())
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 for valid config reload, got %d", w.Code)
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	if resp["status"] != "configuration reloaded" {
 		t.Errorf("unexpected status: %s", resp["status"])
 	}
@@ -764,5 +773,182 @@ func TestLockOnceRejectsGet(t *testing.T) {
 	w := doRequest(srv.Handler, "GET", "/api/lock/once", authHeader())
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+// --- Login lockout ---
+
+func TestLoginFailureIsLogged(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	badAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:wrong"))
+	w := doRequest(srv.Handler, "GET", "/api/status", badAuth)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestLockoutAfter3FailedAttempts(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	badAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:wrong"))
+
+	// 3 failed attempts
+	for i := range 3 {
+		w := doRequest(srv.Handler, "GET", "/api/status", badAuth)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d: expected 401, got %d", i+1, w.Code)
+		}
+	}
+
+	// 4th attempt with correct credentials should get 403 (locked out)
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 after lockout, got %d", w.Code)
+	}
+}
+
+func TestValidLoginResetsFailureCount(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	badAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:wrong"))
+
+	// 2 failed attempts
+	for range 2 {
+		doRequest(srv.Handler, "GET", "/api/status", badAuth)
+	}
+
+	// 1 successful login resets the counter
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 for valid login, got %d", w.Code)
+	}
+
+	// 3 more failed attempts needed to lock out
+	for i := range 3 {
+		w = doRequest(srv.Handler, "GET", "/api/status", badAuth)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("attempt %d after reset: expected 401, got %d", i+1, w.Code)
+		}
+	}
+
+	// Now should be locked out
+	w = doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 after lockout, got %d", w.Code)
+	}
+}
+
+// --- Update endpoints ---
+
+func TestUpdateStatusReturnsJSON(t *testing.T) {
+	cfg := config.NewForTest(0, "admin", "secret")
+	st := state.New(false)
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sched := scheduler.NewWithExec(ctx, st, scheduler.ExecFuncs{
+		Restart:    func() error { return nil },
+		LockScreen: func() error { return nil },
+	}, restartIvl, lockIvl)
+	upd := updater.New("1.0.0", "")
+	srv := New(cfg, "", st, sched, upd)
+
+	req := httptest.NewRequest("GET", "/api/update/status", nil)
+	req.SetBasicAuth("admin", "secret")
+	w := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	ct := w.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("content-type: got %s, want application/json", ct)
+	}
+}
+
+func TestUpdateStatusRejectsPost(t *testing.T) {
+	cfg := config.NewForTest(0, "admin", "secret")
+	st := state.New(false)
+	restartIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sched := scheduler.NewWithExec(ctx, st, scheduler.ExecFuncs{
+		Restart:    func() error { return nil },
+		LockScreen: func() error { return nil },
+	}, restartIvl, lockIvl)
+	upd := updater.New("1.0.0", "")
+	srv := New(cfg, "", st, sched, upd)
+
+	req := httptest.NewRequest("POST", "/api/update/status", nil)
+	req.SetBasicAuth("admin", "secret")
+	w := httptest.NewRecorder()
+	srv.Handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestUpdateCheckRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/update/check", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestUpdateApplyRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/update/apply", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestUpdateApplyNoUpdateReturns409(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "POST", "/api/update/apply", authHeader())
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp["status"] != "no update available" {
+		t.Errorf("expected status 'no update available', got %q", resp["status"])
+	}
+}
+
+// --- Lockout concurrency ---
+
+func TestLockoutConcurrent(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	badAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:wrong"))
+
+	var wg sync.WaitGroup
+	codes := make([]int, 10)
+	for i := range 10 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			w := doRequest(srv.Handler, "GET", "/api/status", badAuth)
+			codes[idx] = w.Code
+		}(i)
+	}
+	wg.Wait()
+
+	// All concurrent bad-cred requests should get 401 or 403 (not 200).
+	for i, code := range codes {
+		if code != http.StatusUnauthorized && code != http.StatusForbidden {
+			t.Errorf("request %d: expected 401 or 403, got %d", i, code)
+		}
+	}
+
+	// After 10 bad attempts the server should be locked out.
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 after concurrent lockout, got %d", w.Code)
 	}
 }

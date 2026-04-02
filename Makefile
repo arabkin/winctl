@@ -1,4 +1,4 @@
-.PHONY: build build-windows build-all run run-dry test test-race test-verbose test-cover e2e e2e-install clean tidy lint help
+.PHONY: build build-windows build-all run run-dry test test-race test-verbose test-cover e2e e2e-install clean tidy lint version release help
 
 # --- Variables ---
 BINARY      := winctl
@@ -77,6 +77,20 @@ lint: ## Run go vet
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR)
 	rm -rf e2e/node_modules e2e/test-results e2e/playwright-report
+
+# --- Release ---
+
+VERSION ?= $(shell grep 'AppVersion' cmd/root.go | head -1 | sed 's/.*"\(.*\)"/\1/')
+
+version: ## Show current version
+	@echo $(VERSION)
+
+release: build-windows ## Create a GitHub release (VERSION=x.y.z to override)
+	@echo "Releasing v$(VERSION)..."
+	gh release create v$(VERSION) $(BIN_DIR)/$(BINARY).exe \
+		--title "WinCtl v$(VERSION)" \
+		--generate-notes
+	@echo "Released: https://github.com/arabkin/winctl/releases/tag/v$(VERSION)"
 
 # --- Help ---
 

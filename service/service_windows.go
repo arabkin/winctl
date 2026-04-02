@@ -5,10 +5,12 @@ package service
 import (
 	"context"
 	"log"
+	"time"
 	"winctl/config"
 	"winctl/scheduler"
 	"winctl/server"
 	"winctl/state"
+	"winctl/updater"
 
 	"golang.org/x/sys/windows/svc"
 )
@@ -19,6 +21,9 @@ var configPath = config.DefaultPath()
 const ServiceName = "WinCtlSvc"
 const DisplayName = "WinCtl Service"
 const Description = "Machine control web dashboard — restart and lock scheduling"
+
+// Version is set by cmd before RunService() is called.
+var Version = "0.0.0"
 
 type WinCtlService struct{}
 
@@ -38,7 +43,9 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	st := state.New(false)
 	statePath := state.StatePath(configPath)
 	st.SetOnChange(func(intent state.Intent) {
-		state.SaveIntent(statePath, intent)
+		if err := state.SaveIntent(statePath, intent); err != nil {
+			log.Printf("warning: %v", err)
+		}
 	})
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
 	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
@@ -55,13 +62,18 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 		sched.StartLockSchedule()
 	}
 
-	srv := server.New(cfg, configPath, st, sched)
+	upd := updater.New(Version, "")
+	srv := server.New(cfg, configPath, st, sched, upd)
 
+	serverDone := make(chan struct{})
 	go func() {
+		defer close(serverDone)
 		if err := server.Run(srv, ctx); err != nil {
 			log.Printf("server error: %v", err)
 		}
 	}()
+
+	go updater.BackgroundCheck(upd, ctx)
 
 	status <- svc.Status{State: svc.Running, Accepts: accepted}
 	log.Println("service running")
@@ -76,6 +88,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 			status <- svc.Status{State: svc.StopPending}
 			sched.Stop()
 			cancel()
+			<-serverDone
 			return false, 0
 		}
 	}

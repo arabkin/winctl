@@ -42,6 +42,38 @@ func (ch *configHolder) reload() (*config.Config, error) {
 	return cfg, nil
 }
 
+const maxFailedAttempts = 3
+
+type loginTracker struct {
+	mu       sync.Mutex
+	failures int
+	locked   bool
+}
+
+func (lt *loginTracker) recordFailure(remoteAddr string) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	lt.failures++
+	log.Printf("login failed from %s (attempt %d/%d)", remoteAddr, lt.failures, maxFailedAttempts)
+	if lt.failures >= maxFailedAttempts {
+		lt.locked = true
+		log.Printf("authentication locked after %d failed attempts — restart service to unlock", maxFailedAttempts)
+	}
+}
+
+func (lt *loginTracker) recordSuccess(remoteAddr string) {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	log.Printf("login successful from %s", remoteAddr)
+	lt.failures = 0
+}
+
+func (lt *loginTracker) isLocked() bool {
+	lt.mu.Lock()
+	defer lt.mu.Unlock()
+	return lt.locked
+}
+
 type session struct {
 	expiresAt time.Time
 }
@@ -107,8 +139,13 @@ func (s *sessionStore) remove(token string) {
 	delete(s.sessions, token)
 }
 
-func basicAuth(ch *configHolder, store *sessionStore, next http.Handler) http.Handler {
+func basicAuth(ch *configHolder, store *sessionStore, tracker *loginTracker, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tracker.isLocked() {
+			http.Error(w, "Too many failed login attempts. Restart the service to unlock.", http.StatusForbidden)
+			return
+		}
+
 		// Check logged-out cookie first — must take priority over valid sessions
 		// so the browser forgets the cached Authorization header after logout.
 		if _, err := r.Cookie(loggedOutCookieName); err == nil {
@@ -142,10 +179,13 @@ func basicAuth(ch *configHolder, store *sessionStore, next http.Handler) http.Ha
 		userOK := subtle.ConstantTimeCompare([]byte(user), []byte(cfg.Username))
 		passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(cfg.Password()))
 		if !ok || (userOK&passOK) != 1 {
+			tracker.recordFailure(r.RemoteAddr)
 			w.Header().Set("WWW-Authenticate", `Basic realm="winctl"`)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
+
+		tracker.recordSuccess(r.RemoteAddr)
 
 		// Credentials valid — create session.
 		token, err := store.create()

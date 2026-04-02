@@ -139,6 +139,63 @@ function poll() {
         });
 }
 
+function checkForUpdate() {
+    fetch('/api/update/status')
+        .then(r => r.json())
+        .then(data => {
+            var card = document.getElementById('upgrade-card');
+            if (data.available) {
+                card.style.display = '';
+                document.getElementById('upgrade-version').textContent = 'v' + data.version;
+                card.dataset.version = data.version;
+                card.dataset.body = data.body || '';
+                card.dataset.size = data.size || 0;
+            } else {
+                card.style.display = 'none';
+            }
+        })
+        .catch(function() {});
+}
+
+function showUpgradeDetails() {
+    var card = document.getElementById('upgrade-card');
+    document.getElementById('upgrade-body').textContent = card.dataset.body || 'No release notes.';
+    var bytes = parseInt(card.dataset.size || '0');
+    document.getElementById('upgrade-size').textContent = (bytes / 1024 / 1024).toFixed(1) + ' MB';
+    document.getElementById('upgrade-details').style.display = '';
+    document.getElementById('upgrade-prompt').style.display = 'none';
+}
+
+function cancelUpgrade() {
+    document.getElementById('upgrade-details').style.display = 'none';
+    document.getElementById('upgrade-prompt').style.display = '';
+}
+
+function applyUpgrade() {
+    document.getElementById('upgrade-details').style.display = 'none';
+    document.getElementById('upgrade-progress').style.display = '';
+    document.getElementById('upgrade-progress-text').textContent = 'Downloading and verifying update...';
+
+    fetch('/api/update/apply', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                document.getElementById('upgrade-progress-text').textContent = 'Error: ' + data.error;
+                showToast('Upgrade failed: ' + data.error, 'error');
+                return;
+            }
+            document.getElementById('upgrade-progress-text').textContent =
+                'Update v' + data.version + ' downloaded and verified. Service will restart shortly.';
+            showToast('Update downloaded. Service restarting...', 'ok');
+        })
+        .catch(function(err) {
+            document.getElementById('upgrade-progress-text').textContent = 'Error: ' + err.message;
+            showToast('Upgrade failed: ' + err.message, 'error');
+        });
+}
+
 poll();
 fetchConfig();
+checkForUpdate();
 setInterval(poll, 2000);
+setInterval(checkForUpdate, 60000);

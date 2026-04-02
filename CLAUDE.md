@@ -15,7 +15,7 @@ GOOS=windows GOARCH=amd64 go build -o bin/winctl.exe .       # Windows cross-com
 ## Test
 
 ```bash
-# Go tests (80 tests across config, state, scheduler, server packages)
+# Go tests (100 tests across config, state, scheduler, server, updater packages)
 go test ./... -v
 
 # Playwright E2E (requires server running on localhost:8443)
@@ -65,6 +65,9 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 | GET | `/api/config` | Current config values (excludes password) |
 | POST | `/api/config/reload` | Reload config from disk (updates auth, intervals) |
 | POST | `/api/logout` | Invalidate session and force re-auth |
+| GET | `/api/update/status` | Cached update check result |
+| POST | `/api/update/check` | Force check for updates |
+| POST | `/api/update/apply` | Download, verify, and apply update |
 
 ## Known Constraints
 
@@ -77,3 +80,7 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 - `uninstall` removes both the service and the firewall rule
 - `upgrade` replaces the installed binary in-place: stops service → backs up old binary (.bak) → copies new binary → starts service; must be run from a different path than the installed binary
 - Server binds `0.0.0.0:<port>` (all interfaces); firewall rule restricts access to private/home networks
+- Login locks out after 3 failed attempts; only service restart clears the lockout (no timed reset)
+- Auto-update checks GitHub API unauthenticated (rate limit: 60 req/hour per IP)
+- Update binary is SHA256-verified against the GitHub release asset digest
+- `updater/` — checks GitHub releases API, downloads binary, verifies SHA256; wired into server and polled every 6 hours

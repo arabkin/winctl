@@ -11,7 +11,9 @@ func TestSaveAndLoadIntent(t *testing.T) {
 	path := filepath.Join(dir, "state.json")
 
 	intent := Intent{RestartScheduleEnabled: true, LockScheduleEnabled: false}
-	SaveIntent(path, intent)
+	if err := SaveIntent(path, intent); err != nil {
+		t.Fatal(err)
+	}
 
 	loaded := LoadIntent(path)
 	if loaded.RestartScheduleEnabled != true {
@@ -112,10 +114,19 @@ func TestOnChangeCalledOnReset(t *testing.T) {
 	}
 }
 
+func TestSaveIntentReturnsErrorForBadPath(t *testing.T) {
+	err := SaveIntent("/nonexistent/dir/state.json", Intent{RestartScheduleEnabled: true})
+	if err == nil {
+		t.Fatal("expected non-nil error for bad path")
+	}
+}
+
 func TestSaveIntentFilePermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "state.json")
-	SaveIntent(path, Intent{RestartScheduleEnabled: true})
+	if err := SaveIntent(path, Intent{RestartScheduleEnabled: true}); err != nil {
+		t.Fatal(err)
+	}
 
 	info, err := os.Stat(path)
 	if err != nil {

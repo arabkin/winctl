@@ -13,11 +13,15 @@ import (
 	"winctl/server"
 	"winctl/service"
 	"winctl/state"
+	"winctl/updater"
 )
+
+var AppVersion = "1.1.0"
 
 func Run() {
 	if len(os.Args) < 2 {
 		if service.IsWindowsService() {
+			service.Version = AppVersion
 			if err := service.RunService(); err != nil {
 				log.Fatalf("service failed: %v", err)
 			}
@@ -64,7 +68,9 @@ func runForeground(dryRun bool, configFile string) {
 	st := state.New(dryRun)
 	statePath := state.StatePath(configFile)
 	st.SetOnChange(func(intent state.Intent) {
-		state.SaveIntent(statePath, intent)
+		if err := state.SaveIntent(statePath, intent); err != nil {
+			log.Printf("warning: %v", err)
+		}
 	})
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
 	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
@@ -81,12 +87,15 @@ func runForeground(dryRun bool, configFile string) {
 		sched.StartLockSchedule()
 	}
 
-	srv := server.New(cfg, configFile, st, sched)
+	upd := updater.New(AppVersion, "")
+	srv := server.New(cfg, configFile, st, sched, upd)
 	defer func() {
 		if err := srv.Close(); err != nil {
 			log.Printf("server close: %v", err)
 		}
 	}()
+
+	go updater.BackgroundCheck(upd, ctx)
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
