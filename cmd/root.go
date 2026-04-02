@@ -16,7 +16,7 @@ import (
 	"winctl/updater"
 )
 
-var AppVersion = "1.1.1"
+var AppVersion = "1.1.2"
 
 func Run() {
 	if len(os.Args) < 2 {
@@ -95,7 +95,7 @@ func runForeground(dryRun bool, configFile string) {
 		}
 	}()
 
-	go updater.BackgroundCheck(upd, ctx)
+	go updater.BackgroundCheck(upd, ctx, cfg.UpdateCheckMinutes)
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

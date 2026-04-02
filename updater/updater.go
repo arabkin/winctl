@@ -75,6 +75,9 @@ func (u *Updater) Check() (UpdateInfo, error) {
 
 	if resp.StatusCode != http.StatusOK {
 		_, _ = io.Copy(io.Discard, resp.Body)
+		if resp.StatusCode == http.StatusNotFound {
+			return UpdateInfo{Available: false}, nil
+		}
 		return UpdateInfo{}, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
@@ -177,9 +180,9 @@ func (u *Updater) Download(info UpdateInfo) (string, error) {
 	return tmp.Name(), nil
 }
 
-// BackgroundCheck runs an immediate update check, then repeats every 6 hours
-// until ctx is cancelled. Intended to be called as a goroutine.
-func BackgroundCheck(u *Updater, ctx context.Context) {
+// BackgroundCheck runs an immediate update check, then repeats at the given
+// interval until ctx is cancelled. Intended to be called as a goroutine.
+func BackgroundCheck(u *Updater, ctx context.Context, intervalMinutes int) {
 	check := func() {
 		if info, err := u.Check(); err != nil {
 			log.Printf("update check: %v", err)
@@ -188,7 +191,7 @@ func BackgroundCheck(u *Updater, ctx context.Context) {
 		}
 	}
 	check()
-	ticker := time.NewTicker(6 * time.Hour)
+	ticker := time.NewTicker(time.Duration(intervalMinutes) * time.Minute)
 	defer ticker.Stop()
 	for {
 		select {

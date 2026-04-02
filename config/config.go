@@ -19,10 +19,11 @@ type Config struct {
 
 	SessionTimeoutMinutes int `json:"session_timeout_minutes"`
 
-	RestartMinMinutes int `json:"restart_min_minutes"`
-	RestartMaxMinutes int `json:"restart_max_minutes"`
-	LockMinMinutes    int `json:"lock_min_minutes"`
-	LockMaxMinutes    int `json:"lock_max_minutes"`
+	RestartMinMinutes  int `json:"restart_min_minutes"`
+	RestartMaxMinutes  int `json:"restart_max_minutes"`
+	LockMinMinutes     int `json:"lock_min_minutes"`
+	LockMaxMinutes     int `json:"lock_max_minutes"`
+	UpdateCheckMinutes int `json:"update_check_minutes"`
 
 	// Decoded password, not serialized to JSON.
 	password string
@@ -52,6 +53,7 @@ func defaults() *Config {
 		RestartMaxMinutes:     15,
 		LockMinMinutes:        5,
 		LockMaxMinutes:        15,
+		UpdateCheckMinutes:    360,
 		password:              plain,
 	}
 }
@@ -111,6 +113,10 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.LockMaxMinutes < cfg.LockMinMinutes || cfg.LockMaxMinutes > maxIntervalMinutes {
 		return nil, fmt.Errorf("lock_max_minutes must be %d-%d in config %s", cfg.LockMinMinutes, maxIntervalMinutes, path)
+	}
+	if cfg.UpdateCheckMinutes <= 0 {
+		log.Printf("warning: update_check_minutes is %d, defaulting to 360", cfg.UpdateCheckMinutes)
+		cfg.UpdateCheckMinutes = 360
 	}
 
 	return cfg, nil

@@ -46,6 +46,8 @@ h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #a0c4ff; }
 }
 
 .card-config { border-color: #1a5276; }
+.config-toggle { cursor: pointer; user-select: none; }
+.config-toggle:hover { color: #c0d8f0; }
 .card-global { border-color: #533483; }
 
 .status-row {

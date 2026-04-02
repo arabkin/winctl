@@ -6,5 +6,6 @@
     "restart_min_minutes": 5,
     "restart_max_minutes": 15,
     "lock_min_minutes": 5,
-    "lock_max_minutes": 15
+    "lock_max_minutes": 15,
+    "update_check_minutes": 1
 }

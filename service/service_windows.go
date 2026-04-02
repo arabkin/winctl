@@ -72,7 +72,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 		}
 	}()
 
-	go updater.BackgroundCheck(upd, ctx)
+	go updater.BackgroundCheck(upd, ctx, cfg.UpdateCheckMinutes)
 
 	status <- svc.Status{State: svc.Running, Accepts: accepted}
 	log.Println("service running")

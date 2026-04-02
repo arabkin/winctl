@@ -10,6 +10,7 @@ func NewForTest(port int, username, password string) *Config {
 		RestartMaxMinutes:     15,
 		LockMinMinutes:        5,
 		LockMaxMinutes:        15,
+		UpdateCheckMinutes:    360,
 		password:              password,
 	}
 }
@@ -24,6 +25,7 @@ func NewForTestWithTimeout(port int, username, password string, sessionTimeoutMi
 		RestartMaxMinutes:     15,
 		LockMinMinutes:        5,
 		LockMaxMinutes:        15,
+		UpdateCheckMinutes:    360,
 		password:              password,
 	}
 }

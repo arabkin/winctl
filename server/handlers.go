@@ -142,6 +142,7 @@ func (h *handlers) configGet(w http.ResponseWriter, r *http.Request) {
 		"restart_max_minutes":     cfg.RestartMaxMinutes,
 		"lock_min_minutes":        cfg.LockMinMinutes,
 		"lock_max_minutes":        cfg.LockMaxMinutes,
+		"update_check_minutes":    cfg.UpdateCheckMinutes,
 	})
 }
 

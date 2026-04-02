@@ -21,6 +21,18 @@ function api(method, path) {
         });
 }
 
+function toggleConfig() {
+    var body = document.getElementById("config-body");
+    var arrow = document.getElementById("config-arrow");
+    if (body.style.display === "none") {
+        body.style.display = "";
+        arrow.innerHTML = "&#9660;";
+    } else {
+        body.style.display = "none";
+        arrow.innerHTML = "&#9654;";
+    }
+}
+
 function fetchConfig() {
     fetch("/api/config")
         .then(r => {
@@ -33,6 +45,12 @@ function fetchConfig() {
             document.getElementById("cfg-session-timeout").textContent = data.session_timeout_minutes + " min";
             document.getElementById("cfg-restart-interval").textContent = data.restart_min_minutes + " - " + data.restart_max_minutes + " min";
             document.getElementById("cfg-lock-interval").textContent = data.lock_min_minutes + " - " + data.lock_max_minutes + " min";
+            var mins = data.update_check_minutes;
+            if (mins >= 60) {
+                document.getElementById("cfg-update-check").textContent = (mins / 60) + "h";
+            } else {
+                document.getElementById("cfg-update-check").textContent = mins + " min";
+            }
         })
         .catch(function() {
             showToast("Failed to load config", "error");
