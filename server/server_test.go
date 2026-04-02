@@ -29,7 +29,7 @@ func setupTestServer(t *testing.T) (*http.Server, *state.State, *scheduler.Sched
 	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
 	upd := updater.New("1.0.0", "")
-	srv := New(cfg, "", st, sched, upd)
+	srv := New(cfg, "", st, sched, upd, "1.0.0")
 	return srv, st, sched
 }
 
@@ -46,7 +46,7 @@ func setupTestServerWithTimeout(t *testing.T, timeoutMinutes int) *http.Server {
 	lockIvl := scheduler.IntervalRange{MinMinutes: 5, MaxMinutes: 15}
 	sched := scheduler.NewWithExec(ctx, st, noopExec, restartIvl, lockIvl)
 	upd := updater.New("1.0.0", "")
-	return New(cfg, "", st, sched, upd)
+	return New(cfg, "", st, sched, upd, "1.0.0")
 }
 
 func authHeader() string {
@@ -722,7 +722,7 @@ func TestConfigReloadWithBadPathReturns500(t *testing.T) {
 	}
 
 	upd := updater.New("1.0.0", "")
-	srv := New(cfg, path, st, sched, upd)
+	srv := New(cfg, path, st, sched, upd, "1.0.0")
 	w := doRequest(srv.Handler, "POST", "/api/config/reload", authHeader())
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 for reload with bad config, got %d", w.Code)
@@ -751,7 +751,7 @@ func TestConfigReloadWithValidConfig(t *testing.T) {
 	}
 
 	upd := updater.New("1.0.0", "")
-	srv := New(cfg, path, st, sched, upd)
+	srv := New(cfg, path, st, sched, upd, "1.0.0")
 	w := doRequest(srv.Handler, "POST", "/api/config/reload", authHeader())
 	if w.Code != http.StatusOK {
 		t.Errorf("expected 200 for valid config reload, got %d", w.Code)
@@ -850,7 +850,7 @@ func TestUpdateStatusReturnsJSON(t *testing.T) {
 		LockScreen: func() error { return nil },
 	}, restartIvl, lockIvl)
 	upd := updater.New("1.0.0", "")
-	srv := New(cfg, "", st, sched, upd)
+	srv := New(cfg, "", st, sched, upd, "1.0.0")
 
 	req := httptest.NewRequest("GET", "/api/update/status", nil)
 	req.SetBasicAuth("admin", "secret")
@@ -878,7 +878,7 @@ func TestUpdateStatusRejectsPost(t *testing.T) {
 		LockScreen: func() error { return nil },
 	}, restartIvl, lockIvl)
 	upd := updater.New("1.0.0", "")
-	srv := New(cfg, "", st, sched, upd)
+	srv := New(cfg, "", st, sched, upd, "1.0.0")
 
 	req := httptest.NewRequest("POST", "/api/update/status", nil)
 	req.SetBasicAuth("admin", "secret")

@@ -31,6 +31,7 @@ h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #a0c4ff; }
 }
 .badge-ok { background: #2d6a4f; color: #b7e4c7; }
 .badge-err { background: #6a2d2d; color: #e4b7b7; }
+.badge-version { background: #1a3a5c; color: #8899aa; }
 .badge-mode-real { background: #2d6a4f; color: #b7e4c7; }
 .badge-mode-dry { background: #b5830a; color: #fff3cd; }
 

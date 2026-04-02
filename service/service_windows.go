@@ -62,7 +62,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	}
 
 	upd := updater.New(Version, "")
-	srv := server.New(cfg, configPath, st, sched, upd)
+	srv := server.New(cfg, configPath, st, sched, upd, Version)
 
 	serverDone := make(chan struct{})
 	go func() {

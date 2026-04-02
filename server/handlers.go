@@ -16,6 +16,7 @@ type handlers struct {
 	sessions  *sessionStore
 	config    *configHolder
 	updater   *updater.Updater
+	version   string
 }
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -36,7 +37,19 @@ func (h *handlers) status(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	writeJSON(w, h.state.Status())
+	s := h.state.Status()
+	writeJSON(w, map[string]any{
+		"version":                 h.version,
+		"dry_run":                 s.DryRun,
+		"restart_schedule_active": s.RestartScheduleActive,
+		"restart_next_at":         s.RestartNextAt,
+		"restart_pending_once":    s.RestartPendingOnce,
+		"restart_once_at":         s.RestartOnceAt,
+		"lock_schedule_active":    s.LockScheduleActive,
+		"lock_next_at":            s.LockNextAt,
+		"lock_pending_once":       s.LockPendingOnce,
+		"lock_once_at":            s.LockOnceAt,
+	})
 }
 
 func (h *handlers) restartOnce(w http.ResponseWriter, r *http.Request) {
