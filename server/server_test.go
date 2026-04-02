@@ -717,7 +717,9 @@ func TestConfigReloadWithBadPathReturns500(t *testing.T) {
 	// Write invalid JSON to a real file so Load() fails at parse time.
 	dir := t.TempDir()
 	path := dir + "/config.json"
-	os.WriteFile(path, []byte("{invalid json"), 0600)
+	if err := os.WriteFile(path, []byte("{invalid json"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	upd := updater.New("1.0.0", "")
 	srv := New(cfg, path, st, sched, upd)
@@ -756,7 +758,9 @@ func TestConfigReloadWithValidConfig(t *testing.T) {
 	}
 
 	var resp map[string]string
-	json.Unmarshal(w.Body.Bytes(), &resp)
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
 	if resp["status"] != "configuration reloaded" {
 		t.Errorf("unexpected status: %s", resp["status"])
 	}
@@ -883,5 +887,68 @@ func TestUpdateStatusRejectsPost(t *testing.T) {
 
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestUpdateCheckRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/update/check", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestUpdateApplyRejectsGet(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "GET", "/api/update/apply", authHeader())
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestUpdateApplyNoUpdateReturns409(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	w := doRequest(srv.Handler, "POST", "/api/update/apply", authHeader())
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d", w.Code)
+	}
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp["status"] != "no update available" {
+		t.Errorf("expected status 'no update available', got %q", resp["status"])
+	}
+}
+
+// --- Lockout concurrency ---
+
+func TestLockoutConcurrent(t *testing.T) {
+	srv, _, _ := setupTestServer(t)
+	badAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("admin:wrong"))
+
+	var wg sync.WaitGroup
+	codes := make([]int, 10)
+	for i := range 10 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			w := doRequest(srv.Handler, "GET", "/api/status", badAuth)
+			codes[idx] = w.Code
+		}(i)
+	}
+	wg.Wait()
+
+	// All concurrent bad-cred requests should get 401 or 403 (not 200).
+	for i, code := range codes {
+		if code != http.StatusUnauthorized && code != http.StatusForbidden {
+			t.Errorf("request %d: expected 401 or 403, got %d", i, code)
+		}
+	}
+
+	// After 10 bad attempts the server should be locked out.
+	w := doRequest(srv.Handler, "GET", "/api/status", authHeader())
+	if w.Code != http.StatusForbidden {
+		t.Errorf("expected 403 after concurrent lockout, got %d", w.Code)
 	}
 }

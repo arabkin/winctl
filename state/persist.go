@@ -3,6 +3,7 @@ package state
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -21,15 +22,15 @@ func StatePath(configPath string) string {
 }
 
 // SaveIntent writes the current schedule intent to disk.
-func SaveIntent(path string, intent Intent) {
+func SaveIntent(path string, intent Intent) error {
 	data, err := json.MarshalIndent(intent, "", "    ")
 	if err != nil {
-		log.Printf("warning: could not marshal state: %v", err)
-		return
+		return fmt.Errorf("marshal state: %w", err)
 	}
 	if err := os.WriteFile(path, data, 0600); err != nil {
-		log.Printf("warning: could not save state to %s: %v", path, err)
+		return fmt.Errorf("save state to %s: %w", path, err)
 	}
+	return nil
 }
 
 // LoadIntent reads the persisted schedule intent from disk.

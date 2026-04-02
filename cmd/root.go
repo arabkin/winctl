@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 	"winctl/config"
 	"winctl/scheduler"
 	"winctl/server"
@@ -22,6 +21,7 @@ var AppVersion = "1.1.0"
 func Run() {
 	if len(os.Args) < 2 {
 		if service.IsWindowsService() {
+			service.Version = AppVersion
 			if err := service.RunService(); err != nil {
 				log.Fatalf("service failed: %v", err)
 			}
@@ -68,7 +68,9 @@ func runForeground(dryRun bool, configFile string) {
 	st := state.New(dryRun)
 	statePath := state.StatePath(configFile)
 	st.SetOnChange(func(intent state.Intent) {
-		state.SaveIntent(statePath, intent)
+		if err := state.SaveIntent(statePath, intent); err != nil {
+			log.Printf("warning: %v", err)
+		}
 	})
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
 	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
@@ -93,27 +95,7 @@ func runForeground(dryRun bool, configFile string) {
 		}
 	}()
 
-	go func() {
-		if info, err := upd.Check(); err != nil {
-			log.Printf("update check: %v", err)
-		} else if info.Available {
-			log.Printf("update available: v%s", info.Version)
-		}
-		ticker := time.NewTicker(6 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if info, err := upd.Check(); err != nil {
-					log.Printf("update check: %v", err)
-				} else if info.Available {
-					log.Printf("update available: v%s", info.Version)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	go updater.BackgroundCheck(upd, ctx)
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)

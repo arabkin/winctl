@@ -14,7 +14,7 @@ func serveRelease(t *testing.T, rel ghRelease) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(rel)
+		_ = json.NewEncoder(w).Encode(rel)
 	}))
 }
 
@@ -131,7 +131,7 @@ func TestDownloadAndVerifySHA256(t *testing.T) {
 	expectedHash := hex.EncodeToString(h[:])
 
 	dlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer dlSrv.Close()
 
@@ -146,7 +146,7 @@ func TestDownloadAndVerifySHA256(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	defer os.Remove(path)
+	defer func() { _ = os.Remove(path) }()
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestDownloadRejectsSHA256Mismatch(t *testing.T) {
 	content := []byte("some content")
 
 	dlSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write(content)
+		_, _ = w.Write(content)
 	}))
 	defer dlSrv.Close()
 
@@ -211,6 +211,10 @@ func TestIsNewer(t *testing.T) {
 		{"1.0.2", "1.0.2", false},
 		{"1.0.1", "1.0.2", false},
 		{"0.9.0", "1.0.2", false},
+		{"not-a-version", "1.0.0", false},
+		{"1.0", "1.0.0", false},
+		{"", "1.0.0", false},
+		{"1.0.0", "", false},
 	}
 
 	for _, tt := range tests {
@@ -220,6 +224,24 @@ func TestIsNewer(t *testing.T) {
 				t.Errorf("isNewer(%q, %q) = %v, want %v", tt.remote, tt.current, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestCheckStripsVPrefix(t *testing.T) {
+	rel := makeRelease("2.0.0", []ghAsset{
+		exeAsset("https://example.com/winctl.exe", "sha256:abc123def456"),
+	})
+	// makeRelease prepends "v" to the tag, so TagName is "v2.0.0".
+	srv := serveRelease(t, rel)
+	defer srv.Close()
+
+	u := New("1.0.0", srv.URL)
+	info, err := u.Check()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info.Version != "2.0.0" {
+		t.Errorf("expected Version='2.0.0' (no v prefix), got %q", info.Version)
 	}
 }
 

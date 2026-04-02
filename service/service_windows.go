@@ -22,6 +22,9 @@ const ServiceName = "WinCtlSvc"
 const DisplayName = "WinCtl Service"
 const Description = "Machine control web dashboard — restart and lock scheduling"
 
+// Version is set by cmd before RunService() is called.
+var Version = "0.0.0"
+
 type WinCtlService struct{}
 
 func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, status chan<- svc.Status) (bool, uint32) {
@@ -40,7 +43,9 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	st := state.New(false)
 	statePath := state.StatePath(configPath)
 	st.SetOnChange(func(intent state.Intent) {
-		state.SaveIntent(statePath, intent)
+		if err := state.SaveIntent(statePath, intent); err != nil {
+			log.Printf("warning: %v", err)
+		}
 	})
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
 	lockIvl := scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes}
@@ -57,36 +62,18 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 		sched.StartLockSchedule()
 	}
 
-	upd := updater.New("1.0.2", "")
+	upd := updater.New(Version, "")
 	srv := server.New(cfg, configPath, st, sched, upd)
 
+	serverDone := make(chan struct{})
 	go func() {
+		defer close(serverDone)
 		if err := server.Run(srv, ctx); err != nil {
 			log.Printf("server error: %v", err)
 		}
 	}()
 
-	go func() {
-		if info, err := upd.Check(); err != nil {
-			log.Printf("update check: %v", err)
-		} else if info.Available {
-			log.Printf("update available: v%s", info.Version)
-		}
-		ticker := time.NewTicker(6 * time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if info, err := upd.Check(); err != nil {
-					log.Printf("update check: %v", err)
-				} else if info.Available {
-					log.Printf("update available: v%s", info.Version)
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	go updater.BackgroundCheck(upd, ctx)
 
 	status <- svc.Status{State: svc.Running, Accepts: accepted}
 	log.Println("service running")
@@ -101,6 +88,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 			status <- svc.Status{State: svc.StopPending}
 			sched.Stop()
 			cancel()
+			<-serverDone
 			return false, 0
 		}
 	}

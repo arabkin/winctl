@@ -1,16 +1,19 @@
 package updater
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const defaultAPIURL = "https://api.github.com/repos/arabkin/winctl/releases/latest"
@@ -68,14 +71,15 @@ func (u *Updater) Check() (UpdateInfo, error) {
 	if err != nil {
 		return UpdateInfo{}, fmt.Errorf("fetching release info: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return UpdateInfo{}, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 
 	var rel ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 2<<20)).Decode(&rel); err != nil {
 		return UpdateInfo{}, fmt.Errorf("decoding release JSON: %w", err)
 	}
 
@@ -138,9 +142,10 @@ func (u *Updater) Download(info UpdateInfo) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("downloading update: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		return "", fmt.Errorf("download returned status %d", resp.StatusCode)
 	}
 
@@ -153,19 +158,46 @@ func (u *Updater) Download(info UpdateInfo) (string, error) {
 	w := io.MultiWriter(tmp, h)
 
 	if _, err := io.Copy(w, resp.Body); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return "", fmt.Errorf("writing update file: %w", err)
 	}
-	tmp.Close()
+	_ = tmp.Close()
 
 	gotHash := hex.EncodeToString(h.Sum(nil))
-	if info.SHA256 != "" && gotHash != info.SHA256 {
-		os.Remove(tmp.Name())
+	if info.SHA256 == "" {
+		log.Printf("warning: no SHA256 checksum in release metadata — integrity not verified")
+	} else if gotHash != info.SHA256 {
+		_ = os.Remove(tmp.Name())
 		return "", fmt.Errorf("SHA256 mismatch: expected %s, got %s", info.SHA256, gotHash)
+	} else {
+		log.Printf("SHA256 verified: %s", gotHash)
 	}
 
 	return tmp.Name(), nil
+}
+
+// BackgroundCheck runs an immediate update check, then repeats every 6 hours
+// until ctx is cancelled. Intended to be called as a goroutine.
+func BackgroundCheck(u *Updater, ctx context.Context) {
+	check := func() {
+		if info, err := u.Check(); err != nil {
+			log.Printf("update check: %v", err)
+		} else if info.Available {
+			log.Printf("update available: v%s", info.Version)
+		}
+	}
+	check()
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			check()
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // isNewer returns true if remote is a newer semver than current.
