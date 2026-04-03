@@ -161,12 +161,13 @@ function updateUI(data) {
 function poll() {
     fetch("/api/status")
         .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
             if (!r.ok) throw new Error(r.status);
             document.getElementById("connection").className = "badge badge-ok";
             document.getElementById("connection").textContent = "connected";
             return r.json();
         })
-        .then(updateUI)
+        .then(data => { if (data) updateUI(data); })
         .catch(() => {
             document.getElementById("connection").className = "badge badge-err";
             document.getElementById("connection").textContent = "disconnected";
@@ -208,6 +209,7 @@ function applyUpgrade() {
     fetch('/api/update/apply', { method: 'POST' })
         .then(r => {
             if (r.status === 401) { window.location.reload(); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
         })
         .then(data => {
