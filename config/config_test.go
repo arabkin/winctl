@@ -39,7 +39,7 @@ func TestSaveAndLoadConfig(t *testing.T) {
 		password:    "secret123",
 	}
 
-	if err := save(original, path); err != nil {
+	if err := Save(original, path); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
@@ -73,7 +73,7 @@ func TestSaveFilePermissions(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 
-	if err := save(defaults(), path); err != nil {
+	if err := Save(defaults(), path); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 
@@ -90,7 +90,9 @@ func TestSaveFilePermissions(t *testing.T) {
 func TestLoadInvalidJSON(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	os.WriteFile(path, []byte("{invalid json"), 0600)
+	if err := os.WriteFile(path, []byte("{invalid json"), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(path)
 	if err == nil {
@@ -103,7 +105,9 @@ func TestLoadInvalidBase64Password(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	data := `{"port": 8443, "username": "admin", "password": "not-valid-base64!!!", "session_timeout_minutes": 30}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(path)
 	if err == nil {
@@ -136,7 +140,9 @@ func TestLoadValidatesSessionTimeout(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 0, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -152,7 +158,9 @@ func TestLoadValidatesNegativeSessionTimeout(t *testing.T) {
 	path := filepath.Join(dir, "config.json")
 
 	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": -5, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, err := Load(path)
 	if err != nil {
@@ -167,7 +175,9 @@ func TestLoadValidatesPort(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := `{"port": 0, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(path)
 	if err == nil {
@@ -179,7 +189,9 @@ func TestLoadValidatesEmptyUsername(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := `{"port": 8443, "username": "", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 5, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(path)
 	if err == nil {
@@ -191,7 +203,9 @@ func TestLoadValidatesIntervalRange(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 0, "restart_max_minutes": 15, "lock_min_minutes": 5, "lock_max_minutes": 15}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(path)
 	if err == nil {
@@ -203,7 +217,9 @@ func TestLoadValidatesMaxLessThanMin(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	data := `{"port": 8443, "username": "admin", "password": "Y2hhbmdlbWU=", "session_timeout_minutes": 30, "restart_min_minutes": 15, "restart_max_minutes": 5, "lock_min_minutes": 5, "lock_max_minutes": 15}`
-	os.WriteFile(path, []byte(data), 0600)
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
 
 	_, err := Load(path)
 	if err == nil {

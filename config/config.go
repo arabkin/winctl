@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -19,11 +19,12 @@ type Config struct {
 
 	SessionTimeoutMinutes int `json:"session_timeout_minutes"`
 
-	RestartMinMinutes  int `json:"restart_min_minutes"`
-	RestartMaxMinutes  int `json:"restart_max_minutes"`
-	LockMinMinutes     int `json:"lock_min_minutes"`
-	LockMaxMinutes     int `json:"lock_max_minutes"`
-	UpdateCheckMinutes int `json:"update_check_minutes"`
+	RestartMinMinutes  int    `json:"restart_min_minutes"`
+	RestartMaxMinutes  int    `json:"restart_max_minutes"`
+	LockMinMinutes     int    `json:"lock_min_minutes"`
+	LockMaxMinutes     int    `json:"lock_max_minutes"`
+	UpdateCheckMinutes int    `json:"update_check_minutes"`
+	LogLevel           string `json:"log_level"`
 
 	// Decoded password, not serialized to JSON.
 	password string
@@ -36,7 +37,7 @@ func (c *Config) Password() string {
 func DefaultPath() string {
 	exe, err := os.Executable()
 	if err != nil {
-		log.Printf("warning: could not determine executable path, using relative config.json: %v", err)
+		slog.Warn("could not determine executable path, using relative config.json", "error", err)
 		return "config.json"
 	}
 	return filepath.Join(filepath.Dir(exe), "config.json")
@@ -54,6 +55,7 @@ func defaults() *Config {
 		LockMinMinutes:        5,
 		LockMaxMinutes:        15,
 		UpdateCheckMinutes:    360,
+		LogLevel:              "info",
 		password:              plain,
 	}
 }
@@ -66,10 +68,10 @@ func Load(path string) (*Config, error) {
 		}
 		// File doesn't exist — first run, create it with defaults.
 		cfg := defaults()
-		if writeErr := save(cfg, path); writeErr != nil {
-			log.Printf("warning: could not write default config to %s: %v", path, writeErr)
+		if writeErr := Save(cfg, path); writeErr != nil {
+			slog.Warn("could not write default config", "path", path, "error", writeErr)
 		} else {
-			log.Printf("created default config at %s", path)
+			slog.Info("created default config", "path", path)
 		}
 		return cfg, nil
 	}
@@ -88,7 +90,7 @@ func Load(path string) (*Config, error) {
 
 	// Validate session timeout.
 	if cfg.SessionTimeoutMinutes <= 0 {
-		log.Printf("warning: session_timeout_minutes is %d, defaulting to 30", cfg.SessionTimeoutMinutes)
+		slog.Warn("invalid session_timeout_minutes, defaulting to 30", "value", cfg.SessionTimeoutMinutes)
 		cfg.SessionTimeoutMinutes = 30
 	}
 
@@ -115,14 +117,24 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("lock_max_minutes must be %d-%d in config %s", cfg.LockMinMinutes, maxIntervalMinutes, path)
 	}
 	if cfg.UpdateCheckMinutes <= 0 {
-		log.Printf("warning: update_check_minutes is %d, defaulting to 360", cfg.UpdateCheckMinutes)
+		slog.Warn("invalid update_check_minutes, defaulting to 360", "value", cfg.UpdateCheckMinutes)
 		cfg.UpdateCheckMinutes = 360
+	}
+	switch cfg.LogLevel {
+	case "debug", "info", "error":
+		// valid
+	default:
+		if cfg.LogLevel != "" {
+			slog.Warn("invalid log_level, defaulting to info", "value", cfg.LogLevel)
+		}
+		cfg.LogLevel = "info"
 	}
 
 	return cfg, nil
 }
 
-func save(cfg *Config, path string) error {
+// Save writes the config to disk.
+func Save(cfg *Config, path string) error {
 	data, err := json.MarshalIndent(cfg, "", "    ")
 	if err != nil {
 		return err

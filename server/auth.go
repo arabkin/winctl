@@ -5,7 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -42,6 +42,18 @@ func (ch *configHolder) reload() (*config.Config, error) {
 	return cfg, nil
 }
 
+func (ch *configHolder) setLogLevel(level string) error {
+	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	prev := ch.cfg.LogLevel
+	ch.cfg.LogLevel = level
+	if err := config.Save(ch.cfg, ch.path); err != nil {
+		ch.cfg.LogLevel = prev
+		return err
+	}
+	return nil
+}
+
 const maxFailedAttempts = 3
 
 type loginTracker struct {
@@ -54,17 +66,17 @@ func (lt *loginTracker) recordFailure(remoteAddr string) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.failures++
-	log.Printf("login failed from %s (attempt %d/%d)", remoteAddr, lt.failures, maxFailedAttempts)
+	slog.Error("login failed", "remote_addr", remoteAddr, "attempt", lt.failures, "max_attempts", maxFailedAttempts)
 	if lt.failures >= maxFailedAttempts {
 		lt.locked = true
-		log.Printf("authentication locked after %d failed attempts — restart service to unlock", maxFailedAttempts)
+		slog.Error("authentication locked", "failed_attempts", maxFailedAttempts)
 	}
 }
 
 func (lt *loginTracker) recordSuccess(remoteAddr string) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	log.Printf("login successful from %s", remoteAddr)
+	slog.Info("login successful", "remote_addr", remoteAddr)
 	lt.failures = 0
 }
 
@@ -190,7 +202,7 @@ func basicAuth(ch *configHolder, store *sessionStore, tracker *loginTracker, nex
 		// Credentials valid — create session.
 		token, err := store.create()
 		if err != nil {
-			log.Printf("error: session token generation failed: %v", err)
+			slog.Error("session token generation failed", "error", err)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}

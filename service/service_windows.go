@@ -4,8 +4,9 @@ package service
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"winctl/config"
+	"winctl/logging"
 	"winctl/scheduler"
 	"winctl/server"
 	"winctl/state"
@@ -32,9 +33,11 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		log.Printf("config load error: %v — service cannot start", err)
+		slog.Error("config load error, service cannot start", "error", err)
 		return false, 1
 	}
+
+	logging.Setup(cfg.LogLevel)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -43,7 +46,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	statePath := state.StatePath(configPath)
 	st.SetOnChange(func(intent state.Intent) {
 		if err := state.SaveIntent(statePath, intent); err != nil {
-			log.Printf("warning: %v", err)
+			slog.Warn("failed to save state", "error", err)
 		}
 	})
 	restartIvl := scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes}
@@ -53,11 +56,11 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	// Restore previously active schedules.
 	intent := state.LoadIntent(statePath)
 	if intent.RestartScheduleEnabled {
-		log.Println("restoring restart schedule from saved state")
+		slog.Info("restoring restart schedule from saved state")
 		sched.StartRestartSchedule()
 	}
 	if intent.LockScheduleEnabled {
-		log.Println("restoring lock schedule from saved state")
+		slog.Info("restoring lock schedule from saved state")
 		sched.StartLockSchedule()
 	}
 
@@ -68,14 +71,14 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	go func() {
 		defer close(serverDone)
 		if err := server.Run(srv, ctx); err != nil {
-			log.Printf("server error: %v", err)
+			slog.Error("server error", "error", err)
 		}
 	}()
 
 	go updater.BackgroundCheck(upd, ctx, cfg.UpdateCheckMinutes)
 
 	status <- svc.Status{State: svc.Running, Accepts: accepted}
-	log.Println("service running")
+	slog.Info("service running")
 
 	for {
 		c := <-req
@@ -83,7 +86,7 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 		case svc.Interrogate:
 			status <- c.CurrentStatus
 		case svc.Stop, svc.Shutdown:
-			log.Println("service stopping")
+			slog.Info("service stopping")
 			status <- svc.Status{State: svc.StopPending}
 			st.SetOnChange(nil) // disconnect persistence before stopping scheduler
 			sched.Stop()

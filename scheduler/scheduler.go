@@ -2,7 +2,7 @@ package scheduler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"math/rand/v2"
 	"sync"
 	"time"
@@ -110,14 +110,14 @@ func (s *Scheduler) StartRestartSchedule() {
 			interval := randomInterval(ivl)
 			next := time.Now().Add(interval)
 			s.state.SetRestartSchedule(true, &next)
-			log.Printf("restart scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
+			slog.Info("restart scheduled", "interval", interval, "next_at", next.Format(time.RFC3339))
 
 			timer := time.NewTimer(interval)
 			select {
 			case <-timer.C:
-				log.Println("executing scheduled restart")
+				slog.Info("executing scheduled restart")
 				if err := s.exec.Restart(); err != nil {
-					log.Printf("restart failed: %v", err)
+					slog.Error("restart failed", "error", err)
 				}
 			case <-ctx.Done():
 				timer.Stop()
@@ -149,15 +149,15 @@ func (s *Scheduler) RestartOnce() {
 
 	at := time.Now().Add(60 * time.Second)
 	s.state.SetRestartOnce(true, &at)
-	log.Printf("one-shot restart in 60s (at %s)", at.Format(time.RFC3339))
+	slog.Info("one-shot restart scheduled", "at", at.Format(time.RFC3339))
 
 	go func() {
 		timer := time.NewTimer(60 * time.Second)
 		select {
 		case <-timer.C:
-			log.Println("executing one-shot restart")
+			slog.Info("executing one-shot restart")
 			if err := s.exec.Restart(); err != nil {
-				log.Printf("restart failed: %v", err)
+				slog.Error("restart failed", "error", err)
 			}
 		case <-ctx.Done():
 			timer.Stop()
@@ -204,14 +204,14 @@ func (s *Scheduler) StartLockSchedule() {
 			interval := randomInterval(ivl)
 			next := time.Now().Add(interval)
 			s.state.SetLockSchedule(true, &next)
-			log.Printf("lock scheduled in %v (at %s)", interval, next.Format(time.RFC3339))
+			slog.Info("lock scheduled", "interval", interval, "next_at", next.Format(time.RFC3339))
 
 			timer := time.NewTimer(interval)
 			select {
 			case <-timer.C:
-				log.Println("executing scheduled lock")
+				slog.Info("executing scheduled lock")
 				if err := s.exec.LockScreen(); err != nil {
-					log.Printf("lock failed: %v", err)
+					slog.Error("lock failed", "error", err)
 				}
 			case <-ctx.Done():
 				timer.Stop()
@@ -243,15 +243,15 @@ func (s *Scheduler) LockOnce() {
 
 	at := time.Now().Add(60 * time.Second)
 	s.state.SetLockOnce(true, &at)
-	log.Printf("one-shot lock in 60s (at %s)", at.Format(time.RFC3339))
+	slog.Info("one-shot lock scheduled", "at", at.Format(time.RFC3339))
 
 	go func() {
 		timer := time.NewTimer(60 * time.Second)
 		select {
 		case <-timer.C:
-			log.Println("executing one-shot lock")
+			slog.Info("executing one-shot lock")
 			if err := s.exec.LockScreen(); err != nil {
-				log.Printf("lock failed: %v", err)
+				slog.Error("lock failed", "error", err)
 			}
 		case <-ctx.Done():
 			timer.Stop()
@@ -273,8 +273,7 @@ func (s *Scheduler) UpdateIntervals(restart, lock IntervalRange) {
 	defer s.mu.Unlock()
 	s.restartInterval = restart
 	s.lockInterval = lock
-	log.Printf("scheduler intervals updated: restart %d-%dm, lock %d-%dm",
-		restart.MinMinutes, restart.MaxMinutes, lock.MinMinutes, lock.MaxMinutes)
+	slog.Info("scheduler intervals updated", "restart_min", restart.MinMinutes, "restart_max", restart.MaxMinutes, "lock_min", lock.MinMinutes, "lock_max", lock.MaxMinutes)
 }
 
 func (s *Scheduler) ResetAll() {
@@ -293,5 +292,5 @@ func (s *Scheduler) ResetAll() {
 	s.mu.Unlock()
 
 	s.state.Reset()
-	log.Println("all schedules and pending actions reset")
+	slog.Info("all schedules and pending actions reset")
 }

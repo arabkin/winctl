@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"log/slog"
 	"net/http"
 	"time"
 	"winctl/config"
@@ -30,6 +31,7 @@ func New(cfg *config.Config, configPath string, st *state.State, sched *schedule
 	mux.HandleFunc("/api/logout", h.logout)
 	mux.HandleFunc("/api/config", h.configGet)
 	mux.HandleFunc("/api/config/reload", h.configReload)
+	mux.HandleFunc("/api/config/loglevel", h.configSetLogLevel)
 	mux.HandleFunc("/api/update/status", h.updateStatus)
 	mux.HandleFunc("/api/update/check", h.updateCheck)
 	mux.HandleFunc("/api/update/apply", h.updateApply)
@@ -52,7 +54,7 @@ func New(cfg *config.Config, configPath string, st *state.State, sched *schedule
 func Run(srv *http.Server, ctx context.Context) error {
 	errCh := make(chan error, 1)
 	go func() {
-		log.Printf("HTTP server listening on %s", srv.Addr)
+		slog.Debug("HTTP server listening", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
 			errCh <- err
 		}
