@@ -153,6 +153,8 @@ function updateUI(data) {
     if (data.update_available && data.update_version) {
         upgradeCard.style.display = "";
         document.getElementById("upgrade-version").textContent = "v" + data.update_version;
+    } else {
+        upgradeCard.style.display = "none";
     }
 }
 
@@ -173,16 +175,21 @@ function poll() {
 
 function showUpgradeDetails() {
     fetch('/api/update/status')
-        .then(r => r.json())
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
         .then(data => {
+            if (data === null) return;
             document.getElementById('upgrade-body').textContent = data.body || 'No release notes.';
             var bytes = data.size || 0;
             document.getElementById('upgrade-size').textContent = (bytes / 1024 / 1024).toFixed(1) + ' MB';
             document.getElementById('upgrade-details').style.display = '';
             document.getElementById('upgrade-prompt').style.display = 'none';
         })
-        .catch(function() {
-            document.getElementById('upgrade-body').textContent = 'Failed to load release details.';
+        .catch(function(err) {
+            document.getElementById('upgrade-body').textContent = 'Failed to load release details: ' + err.message;
             document.getElementById('upgrade-details').style.display = '';
             document.getElementById('upgrade-prompt').style.display = 'none';
         });
@@ -199,8 +206,12 @@ function applyUpgrade() {
     document.getElementById('upgrade-progress-text').textContent = 'Downloading and verifying update...';
 
     fetch('/api/update/apply', { method: 'POST' })
-        .then(r => r.json())
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
+            return r.json();
+        })
         .then(data => {
+            if (data === null) return;
             if (data.error) {
                 document.getElementById('upgrade-progress-text').textContent = 'Error: ' + data.error;
                 showToast('Upgrade failed: ' + data.error, 'error');
