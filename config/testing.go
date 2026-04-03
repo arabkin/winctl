@@ -11,6 +11,7 @@ func NewForTest(port int, username, password string) *Config {
 		LockMinMinutes:        5,
 		LockMaxMinutes:        15,
 		UpdateCheckMinutes:    360,
+		LogLevel:              "info",
 		password:              password,
 	}
 }
@@ -26,6 +27,7 @@ func NewForTestWithTimeout(port int, username, password string, sessionTimeoutMi
 		LockMinMinutes:        5,
 		LockMaxMinutes:        15,
 		UpdateCheckMinutes:    360,
+		LogLevel:              "info",
 		password:              password,
 	}
 }

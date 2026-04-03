@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 )
@@ -39,13 +39,13 @@ func LoadIntent(path string) Intent {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if !errors.Is(err, os.ErrNotExist) {
-			log.Printf("warning: could not read state from %s: %v", path, err)
+			slog.Warn("could not read state file", "path", path, "error", err)
 		}
 		return Intent{}
 	}
 	var intent Intent
 	if err := json.Unmarshal(data, &intent); err != nil {
-		log.Printf("warning: invalid state file %s: %v", path, err)
+		slog.Warn("invalid state file", "path", path, "error", err)
 		return Intent{}
 	}
 	return intent

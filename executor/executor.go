@@ -1,7 +1,7 @@
 package executor
 
 import (
-	"log"
+	"log/slog"
 	"os/exec"
 )
 
@@ -14,11 +14,11 @@ func LockScreen() error {
 }
 
 func DryRestart() error {
-	log.Println("[DRY RUN] simulating restart (shutdown /r /t 60)")
+	slog.Debug("[DRY RUN] simulating restart", "command", "shutdown /r /t 60")
 	return nil
 }
 
 func DryLockScreen() error {
-	log.Println("[DRY RUN] simulating screen lock (rundll32 LockWorkStation)")
+	slog.Debug("[DRY RUN] simulating screen lock", "command", "rundll32 LockWorkStation")
 	return nil
 }

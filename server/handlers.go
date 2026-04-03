@@ -3,8 +3,9 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
+	"winctl/logging"
 	"winctl/scheduler"
 	"winctl/state"
 	"winctl/updater"
@@ -22,7 +23,7 @@ type handlers struct {
 func writeJSON(w http.ResponseWriter, v any) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(v); err != nil {
-		log.Printf("error: failed to encode JSON response: %v", err)
+		slog.Error("failed to encode JSON response", "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":"internal server error"}`))
@@ -146,6 +147,7 @@ func (h *handlers) configGet(w http.ResponseWriter, r *http.Request) {
 		"lock_min_minutes":        cfg.LockMinMinutes,
 		"lock_max_minutes":        cfg.LockMaxMinutes,
 		"update_check_minutes":    cfg.UpdateCheckMinutes,
+		"log_level":               cfg.LogLevel,
 	})
 }
 
@@ -156,7 +158,7 @@ func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg, err := h.config.reload()
 	if err != nil {
-		log.Printf("config reload failed: %v", err)
+		slog.Error("config reload failed", "error", err)
 		http.Error(w, "config reload failed", http.StatusInternalServerError)
 		return
 	}
@@ -165,8 +167,34 @@ func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 		scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes},
 	)
 	h.sessions.updateTimeout(cfg.SessionTimeoutMinutes)
-	log.Println("configuration reloaded successfully")
+	logging.Setup(cfg.LogLevel)
+	slog.Info("configuration reloaded")
 	writeJSON(w, map[string]string{"status": "configuration reloaded"})
+}
+
+func (h *handlers) configSetLogLevel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	level := r.URL.Query().Get("level")
+	switch level {
+	case "debug", "info", "error":
+		// valid
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]string{"error": "invalid level: must be debug, info, or error"})
+		return
+	}
+	if err := h.config.setLogLevel(level); err != nil {
+		slog.Error("failed to save log level", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, map[string]string{"error": "failed to save config"})
+		return
+	}
+	logging.Setup(level)
+	slog.Info("log level changed", "level", level)
+	writeJSON(w, map[string]string{"status": "log level set to " + level})
 }
 
 func (h *handlers) updateStatus(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +212,7 @@ func (h *handlers) updateCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	info, err := h.updater.Check()
 	if err != nil {
-		log.Printf("update check failed: %v", err)
+		slog.Error("update check failed", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]string{"error": "update check failed: " + err.Error()})
 		return
@@ -205,11 +233,11 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpPath, err := h.updater.Download(info)
 	if err != nil {
-		log.Printf("update download failed: %v", err)
+		slog.Error("update download failed", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]string{"error": "download failed: " + err.Error()})
 		return
 	}
-	log.Printf("update downloaded to %s, initiating upgrade to %s", tmpPath, info.Version)
+	slog.Info("update downloaded", "path", tmpPath, "version", info.Version)
 	writeJSON(w, map[string]string{"status": "downloaded", "version": info.Version})
 }

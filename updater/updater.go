@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"strconv"
@@ -169,12 +169,12 @@ func (u *Updater) Download(info UpdateInfo) (string, error) {
 
 	gotHash := hex.EncodeToString(h.Sum(nil))
 	if info.SHA256 == "" {
-		log.Printf("warning: no SHA256 checksum in release metadata — integrity not verified")
+		slog.Warn("no SHA256 checksum in release metadata, integrity not verified")
 	} else if gotHash != info.SHA256 {
 		_ = os.Remove(tmp.Name())
 		return "", fmt.Errorf("SHA256 mismatch: expected %s, got %s", info.SHA256, gotHash)
 	} else {
-		log.Printf("SHA256 verified: %s", gotHash)
+		slog.Debug("SHA256 verified", "hash", gotHash)
 	}
 
 	return tmp.Name(), nil
@@ -185,9 +185,9 @@ func (u *Updater) Download(info UpdateInfo) (string, error) {
 func BackgroundCheck(u *Updater, ctx context.Context, intervalMinutes int) {
 	check := func() {
 		if info, err := u.Check(); err != nil {
-			log.Printf("update check: %v", err)
+			slog.Error("update check failed", "error", err)
 		} else if info.Available {
-			log.Printf("update available: v%s", info.Version)
+			slog.Info("update available", "version", info.Version)
 		}
 	}
 	check()
