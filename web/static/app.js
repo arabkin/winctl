@@ -147,48 +147,53 @@ function updateUI(data) {
         lOnce.textContent = "None";
         lOnce.style.color = "";
     }
+
+    // Upgrade card (from status poll, no separate fetch needed)
+    var upgradeCard = document.getElementById("upgrade-card");
+    if (data.update_available && data.update_version) {
+        upgradeCard.style.display = "";
+        document.getElementById("upgrade-version").textContent = "v" + data.update_version;
+    } else {
+        upgradeCard.style.display = "none";
+    }
 }
 
 function poll() {
     fetch("/api/status")
         .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
             if (!r.ok) throw new Error(r.status);
             document.getElementById("connection").className = "badge badge-ok";
             document.getElementById("connection").textContent = "connected";
             return r.json();
         })
-        .then(updateUI)
+        .then(data => { if (data) updateUI(data); })
         .catch(() => {
             document.getElementById("connection").className = "badge badge-err";
             document.getElementById("connection").textContent = "disconnected";
         });
 }
 
-function checkForUpdate() {
-    fetch('/api/update/status')
-        .then(r => r.json())
-        .then(data => {
-            var card = document.getElementById('upgrade-card');
-            if (data.available) {
-                card.style.display = '';
-                document.getElementById('upgrade-version').textContent = 'v' + data.version;
-                card.dataset.version = data.version;
-                card.dataset.body = data.body || '';
-                card.dataset.size = data.size || 0;
-            } else {
-                card.style.display = 'none';
-            }
-        })
-        .catch(function() {});
-}
-
 function showUpgradeDetails() {
-    var card = document.getElementById('upgrade-card');
-    document.getElementById('upgrade-body').textContent = card.dataset.body || 'No release notes.';
-    var bytes = parseInt(card.dataset.size || '0');
-    document.getElementById('upgrade-size').textContent = (bytes / 1024 / 1024).toFixed(1) + ' MB';
-    document.getElementById('upgrade-details').style.display = '';
-    document.getElementById('upgrade-prompt').style.display = 'none';
+    fetch('/api/update/status')
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(data => {
+            if (data === null) return;
+            document.getElementById('upgrade-body').textContent = data.body || 'No release notes.';
+            var bytes = data.size || 0;
+            document.getElementById('upgrade-size').textContent = (bytes / 1024 / 1024).toFixed(1) + ' MB';
+            document.getElementById('upgrade-details').style.display = '';
+            document.getElementById('upgrade-prompt').style.display = 'none';
+        })
+        .catch(function(err) {
+            document.getElementById('upgrade-body').textContent = 'Failed to load release details: ' + err.message;
+            document.getElementById('upgrade-details').style.display = '';
+            document.getElementById('upgrade-prompt').style.display = 'none';
+        });
 }
 
 function cancelUpgrade() {
@@ -202,8 +207,13 @@ function applyUpgrade() {
     document.getElementById('upgrade-progress-text').textContent = 'Downloading and verifying update...';
 
     fetch('/api/update/apply', { method: 'POST' })
-        .then(r => r.json())
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
         .then(data => {
+            if (data === null) return;
             if (data.error) {
                 document.getElementById('upgrade-progress-text').textContent = 'Error: ' + data.error;
                 showToast('Upgrade failed: ' + data.error, 'error');
@@ -221,6 +231,4 @@ function applyUpgrade() {
 
 poll();
 fetchConfig();
-checkForUpdate();
 setInterval(poll, 2000);
-setInterval(checkForUpdate, 60000);
