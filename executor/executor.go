@@ -14,11 +14,11 @@ func LockScreen() error {
 }
 
 func DryRestart() error {
-	slog.Debug("[DRY RUN] simulating restart", "command", "shutdown /r /t 60")
+	slog.Info("[DRY RUN] simulating restart", "command", "shutdown /r /t 60")
 	return nil
 }
 
 func DryLockScreen() error {
-	slog.Debug("[DRY RUN] simulating screen lock", "command", "rundll32 LockWorkStation")
+	slog.Info("[DRY RUN] simulating screen lock", "command", "rundll32 LockWorkStation")
 	return nil
 }

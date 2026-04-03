@@ -18,7 +18,7 @@ import (
 	"winctl/updater"
 )
 
-var AppVersion = "1.1.4"
+var AppVersion = "1.1.5"
 
 func Run() {
 	if len(os.Args) < 2 {
@@ -67,11 +67,19 @@ func runForeground(dryRun bool, configFile string, logLevelFlag string) {
 
 	// CLI flag overrides config; config is the default.
 	level := cfg.LogLevel
-	if logLevelFlag != "" && logLevelFlag != cfg.LogLevel {
-		level = logLevelFlag
-		cfg.LogLevel = level
-		if saveErr := config.Save(cfg, configFile); saveErr != nil {
-			slog.Warn("failed to persist log level to config", "error", saveErr)
+	if logLevelFlag != "" {
+		switch logLevelFlag {
+		case "debug", "info", "error":
+			// valid
+		default:
+			log.Fatalf("invalid --log value %q: must be debug, info, or error", logLevelFlag)
+		}
+		if logLevelFlag != cfg.LogLevel {
+			level = logLevelFlag
+			cfg.LogLevel = level
+			if saveErr := config.Save(cfg, configFile); saveErr != nil {
+				log.Printf("warning: failed to persist log level to config: %v", saveErr)
+			}
 		}
 	}
 	logging.Setup(level)

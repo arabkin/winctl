@@ -110,7 +110,7 @@ func (s *Scheduler) StartRestartSchedule() {
 			interval := randomInterval(ivl)
 			next := time.Now().Add(interval)
 			s.state.SetRestartSchedule(true, &next)
-			slog.Debug("restart scheduled", "interval", interval, "next_at", next.Format(time.RFC3339))
+			slog.Info("restart scheduled", "interval", interval, "next_at", next.Format(time.RFC3339))
 
 			timer := time.NewTimer(interval)
 			select {
@@ -149,7 +149,7 @@ func (s *Scheduler) RestartOnce() {
 
 	at := time.Now().Add(60 * time.Second)
 	s.state.SetRestartOnce(true, &at)
-	slog.Debug("one-shot restart scheduled", "at", at.Format(time.RFC3339))
+	slog.Info("one-shot restart scheduled", "at", at.Format(time.RFC3339))
 
 	go func() {
 		timer := time.NewTimer(60 * time.Second)
@@ -204,7 +204,7 @@ func (s *Scheduler) StartLockSchedule() {
 			interval := randomInterval(ivl)
 			next := time.Now().Add(interval)
 			s.state.SetLockSchedule(true, &next)
-			slog.Debug("lock scheduled", "interval", interval, "next_at", next.Format(time.RFC3339))
+			slog.Info("lock scheduled", "interval", interval, "next_at", next.Format(time.RFC3339))
 
 			timer := time.NewTimer(interval)
 			select {
@@ -243,7 +243,7 @@ func (s *Scheduler) LockOnce() {
 
 	at := time.Now().Add(60 * time.Second)
 	s.state.SetLockOnce(true, &at)
-	slog.Debug("one-shot lock scheduled", "at", at.Format(time.RFC3339))
+	slog.Info("one-shot lock scheduled", "at", at.Format(time.RFC3339))
 
 	go func() {
 		timer := time.NewTimer(60 * time.Second)
@@ -273,7 +273,7 @@ func (s *Scheduler) UpdateIntervals(restart, lock IntervalRange) {
 	defer s.mu.Unlock()
 	s.restartInterval = restart
 	s.lockInterval = lock
-	slog.Debug("scheduler intervals updated", "restart_min", restart.MinMinutes, "restart_max", restart.MaxMinutes, "lock_min", lock.MinMinutes, "lock_max", lock.MaxMinutes)
+	slog.Info("scheduler intervals updated", "restart_min", restart.MinMinutes, "restart_max", restart.MaxMinutes, "lock_min", lock.MinMinutes, "lock_max", lock.MaxMinutes)
 }
 
 func (s *Scheduler) ResetAll() {

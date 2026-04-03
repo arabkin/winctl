@@ -182,12 +182,14 @@ func (h *handlers) configSetLogLevel(w http.ResponseWriter, r *http.Request) {
 	case "debug", "info", "error":
 		// valid
 	default:
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		writeJSON(w, map[string]string{"error": "invalid level: must be debug, info, or error"})
 		return
 	}
 	if err := h.config.setLogLevel(level); err != nil {
 		slog.Error("failed to save log level", "error", err)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]string{"error": "failed to save config"})
 		return
@@ -213,6 +215,7 @@ func (h *handlers) updateCheck(w http.ResponseWriter, r *http.Request) {
 	info, err := h.updater.Check()
 	if err != nil {
 		slog.Error("update check failed", "error", err)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]string{"error": "update check failed: " + err.Error()})
 		return
@@ -227,6 +230,7 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	}
 	info := h.updater.Cached()
 	if !info.Available {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(w, map[string]string{"status": "no update available"})
 		return
@@ -234,6 +238,7 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	tmpPath, err := h.updater.Download(info)
 	if err != nil {
 		slog.Error("update download failed", "error", err)
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		writeJSON(w, map[string]string{"error": "download failed: " + err.Error()})
 		return

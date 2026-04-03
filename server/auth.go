@@ -44,10 +44,11 @@ func (ch *configHolder) reload() (*config.Config, error) {
 
 func (ch *configHolder) setLogLevel(level string) error {
 	ch.mu.Lock()
+	defer ch.mu.Unlock()
+	prev := ch.cfg.LogLevel
 	ch.cfg.LogLevel = level
-	err := config.Save(ch.cfg, ch.path)
-	ch.mu.Unlock()
-	if err != nil {
+	if err := config.Save(ch.cfg, ch.path); err != nil {
+		ch.cfg.LogLevel = prev
 		return err
 	}
 	return nil
@@ -65,10 +66,10 @@ func (lt *loginTracker) recordFailure(remoteAddr string) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
 	lt.failures++
-	slog.Warn("login failed", "remote_addr", remoteAddr, "attempt", lt.failures, "max_attempts", maxFailedAttempts)
+	slog.Error("login failed", "remote_addr", remoteAddr, "attempt", lt.failures, "max_attempts", maxFailedAttempts)
 	if lt.failures >= maxFailedAttempts {
 		lt.locked = true
-		slog.Warn("authentication locked", "failed_attempts", maxFailedAttempts)
+		slog.Error("authentication locked", "failed_attempts", maxFailedAttempts)
 	}
 }
 
