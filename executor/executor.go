@@ -1,17 +1,6 @@
 package executor
 
-import (
-	"log/slog"
-	"os/exec"
-)
-
-func Restart() error {
-	return exec.Command("shutdown", "/r", "/t", "60").Run()
-}
-
-func LockScreen() error {
-	return exec.Command("rundll32.exe", "user32.dll,LockWorkStation").Run()
-}
+import "log/slog"
 
 func DryRestart() error {
 	slog.Info("[DRY RUN] simulating restart", "command", "shutdown /r /t 60")
@@ -19,6 +8,6 @@ func DryRestart() error {
 }
 
 func DryLockScreen() error {
-	slog.Info("[DRY RUN] simulating screen lock", "command", "rundll32 LockWorkStation")
+	slog.Info("[DRY RUN] simulating screen lock", "command", "LockWorkStation")
 	return nil
 }
