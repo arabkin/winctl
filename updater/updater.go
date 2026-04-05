@@ -78,6 +78,10 @@ func (u *Updater) Check() (UpdateInfo, error) {
 		if resp.StatusCode == http.StatusNotFound {
 			return UpdateInfo{Available: false}, nil
 		}
+		if resp.StatusCode == http.StatusForbidden {
+			slog.Warn("GitHub API rate limited, using cached result")
+			return u.Cached(), nil
+		}
 		return UpdateInfo{}, fmt.Errorf("GitHub API returned status %d", resp.StatusCode)
 	}
 

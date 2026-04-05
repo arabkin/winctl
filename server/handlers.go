@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"winctl/config"
 	"winctl/logging"
 	"winctl/scheduler"
 	"winctl/state"
@@ -151,6 +152,102 @@ func (h *handlers) configGet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *handlers) configUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		SessionTimeoutMinutes int    `json:"session_timeout_minutes"`
+		RestartMinMinutes     int    `json:"restart_min_minutes"`
+		RestartMaxMinutes     int    `json:"restart_max_minutes"`
+		LockMinMinutes        int    `json:"lock_min_minutes"`
+		LockMaxMinutes        int    `json:"lock_max_minutes"`
+		UpdateCheckMinutes    int    `json:"update_check_minutes"`
+		LogLevel              string `json:"log_level"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	var errors []string
+	if req.SessionTimeoutMinutes < 1 {
+		errors = append(errors, "session timeout must be at least 1 minute")
+	}
+	if req.RestartMinMinutes < 1 || req.RestartMinMinutes > 1440 {
+		errors = append(errors, "restart min must be 1-1440 minutes")
+	}
+	if req.RestartMaxMinutes < req.RestartMinMinutes || req.RestartMaxMinutes > 1440 {
+		errors = append(errors, "restart max must be >= min and <= 1440")
+	}
+	if req.LockMinMinutes < 1 || req.LockMinMinutes > 1440 {
+		errors = append(errors, "lock min must be 1-1440 minutes")
+	}
+	if req.LockMaxMinutes < req.LockMinMinutes || req.LockMaxMinutes > 1440 {
+		errors = append(errors, "lock max must be >= min and <= 1440")
+	}
+	if req.UpdateCheckMinutes < 1 {
+		errors = append(errors, "update check must be at least 1 minute")
+	}
+	switch req.LogLevel {
+	case "debug", "info", "error":
+	default:
+		errors = append(errors, "log level must be debug, info, or error")
+	}
+	if len(errors) > 0 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]any{"error": "validation failed", "details": errors})
+		return
+	}
+
+	h.config.mu.Lock()
+	h.config.cfg.SessionTimeoutMinutes = req.SessionTimeoutMinutes
+	h.config.cfg.RestartMinMinutes = req.RestartMinMinutes
+	h.config.cfg.RestartMaxMinutes = req.RestartMaxMinutes
+	h.config.cfg.LockMinMinutes = req.LockMinMinutes
+	h.config.cfg.LockMaxMinutes = req.LockMaxMinutes
+	h.config.cfg.UpdateCheckMinutes = req.UpdateCheckMinutes
+	h.config.cfg.LogLevel = req.LogLevel
+	err := config.Save(h.config.cfg, h.config.path)
+	h.config.mu.Unlock()
+	if err != nil {
+		slog.Error("config save failed", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, map[string]string{"error": "failed to save config"})
+		return
+	}
+
+	cfg, err := h.config.reload()
+	if err != nil {
+		slog.Error("config reload after save failed", "error", err)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, map[string]string{"error": "saved but reload failed"})
+		return
+	}
+	h.scheduler.UpdateIntervals(
+		scheduler.IntervalRange{MinMinutes: cfg.RestartMinMinutes, MaxMinutes: cfg.RestartMaxMinutes},
+		scheduler.IntervalRange{MinMinutes: cfg.LockMinMinutes, MaxMinutes: cfg.LockMaxMinutes},
+	)
+	h.sessions.updateTimeout(cfg.SessionTimeoutMinutes)
+	logging.Setup(cfg.LogLevel)
+	slog.Info("configuration updated",
+		"session_timeout", cfg.SessionTimeoutMinutes,
+		"restart_min", cfg.RestartMinMinutes,
+		"restart_max", cfg.RestartMaxMinutes,
+		"lock_min", cfg.LockMinMinutes,
+		"lock_max", cfg.LockMaxMinutes,
+		"update_check", cfg.UpdateCheckMinutes,
+		"log_level", cfg.LogLevel,
+	)
+	writeJSON(w, map[string]string{"status": "configuration saved"})
+}
+
 func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -168,7 +265,15 @@ func (h *handlers) configReload(w http.ResponseWriter, r *http.Request) {
 	)
 	h.sessions.updateTimeout(cfg.SessionTimeoutMinutes)
 	logging.Setup(cfg.LogLevel)
-	slog.Info("configuration reloaded")
+	slog.Info("configuration reloaded",
+		"session_timeout", cfg.SessionTimeoutMinutes,
+		"restart_min", cfg.RestartMinMinutes,
+		"restart_max", cfg.RestartMaxMinutes,
+		"lock_min", cfg.LockMinMinutes,
+		"lock_max", cfg.LockMaxMinutes,
+		"update_check", cfg.UpdateCheckMinutes,
+		"log_level", cfg.LogLevel,
+	)
 	writeJSON(w, map[string]string{"status": "configuration reloaded"})
 }
 

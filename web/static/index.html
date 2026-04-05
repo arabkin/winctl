@@ -65,45 +65,66 @@
                 </div>
                 <div class="status-row">
                     <span class="label">Session timeout:</span>
-                    <span id="cfg-session-timeout" class="value">-</span>
+                    <span id="cfg-session-timeout" class="value cfg-display">-</span>
+                    <input id="cfg-session-timeout-input" class="cfg-input" type="text" inputmode="numeric" pattern="[0-9]*" oninput="validateConfigInputs()" style="display:none;">
                 </div>
                 <div class="status-row">
-                    <span class="label">Restart interval:</span>
-                    <span id="cfg-restart-interval" class="value">-</span>
+                    <span class="label">Restart min (min):</span>
+                    <span id="cfg-restart-min" class="value cfg-display">-</span>
+                    <input id="cfg-restart-min-input" class="cfg-input" type="text" inputmode="numeric" pattern="[0-9]*" oninput="validateConfigInputs()" style="display:none;">
                 </div>
                 <div class="status-row">
-                    <span class="label">Lock interval:</span>
-                    <span id="cfg-lock-interval" class="value">-</span>
+                    <span class="label">Restart max (min):</span>
+                    <span id="cfg-restart-max" class="value cfg-display">-</span>
+                    <input id="cfg-restart-max-input" class="cfg-input" type="text" inputmode="numeric" pattern="[0-9]*" oninput="validateConfigInputs()" style="display:none;">
                 </div>
                 <div class="status-row">
-                    <span class="label">Update check:</span>
-                    <span id="cfg-update-check" class="value">-</span>
+                    <span class="label">Lock min (min):</span>
+                    <span id="cfg-lock-min" class="value cfg-display">-</span>
+                    <input id="cfg-lock-min-input" class="cfg-input" type="text" inputmode="numeric" pattern="[0-9]*" oninput="validateConfigInputs()" style="display:none;">
                 </div>
+                <div class="status-row">
+                    <span class="label">Lock max (min):</span>
+                    <span id="cfg-lock-max" class="value cfg-display">-</span>
+                    <input id="cfg-lock-max-input" class="cfg-input" type="text" inputmode="numeric" pattern="[0-9]*" oninput="validateConfigInputs()" style="display:none;">
+                </div>
+                <div class="status-row">
+                    <span class="label">Update check (min):</span>
+                    <span id="cfg-update-check" class="value cfg-display">-</span>
+                    <input id="cfg-update-check-input" class="cfg-input" type="text" inputmode="numeric" pattern="[0-9]*" oninput="validateConfigInputs()" style="display:none;">
+                </div>
+                <div class="status-row">
+                    <span class="label">Log level:</span>
+                    <span id="cfg-log-level" class="value cfg-display">-</span>
+                    <select id="cfg-log-level-input" class="cfg-input" style="display:none;">
+                        <option value="debug">debug</option>
+                        <option value="info">info</option>
+                        <option value="error">error</option>
+                    </select>
+                </div>
+                <div id="cfg-hint" class="cfg-hint" style="display:none;">Ensure max >= min for intervals. Values in minutes (1-1440).</div>
                 <div class="actions">
-                    <button onclick="reloadConfig()" class="btn-reload">Reload Configuration</button>
+                    <button id="cfg-edit-btn" onclick="editConfig()" class="btn-reload">Edit</button>
+                    <button id="cfg-save-btn" onclick="saveConfig()" class="btn-on" style="display:none;">Save</button>
+                    <button id="cfg-cancel-btn" onclick="cancelEditConfig()" class="btn-off" style="display:none;">Cancel</button>
+                    <button id="cfg-reset-btn" onclick="resetConfigDefaults()" class="btn-reset-defaults" style="display:none;">Reset to Default</button>
                 </div>
             </div>
         </section>
 
-        <section id="upgrade-card" class="card card-upgrade" style="display:none;">
-            <h2>Upgrade Available</h2>
-            <div class="status-row">
-                <span class="label">New version:</span>
-                <span id="upgrade-version" class="value"></span>
-            </div>
-            <div id="upgrade-details" style="display:none;">
-                <div class="upgrade-body" id="upgrade-body"></div>
+        <section id="upgrade-card" class="card card-upgrade">
+            <h2 id="upgrade-title">Updates</h2>
+            <div id="upgrade-info" style="display:none;">
                 <div class="status-row">
-                    <span class="label">Size:</span>
-                    <span id="upgrade-size" class="value"></span>
-                </div>
-                <div class="actions">
-                    <button class="btn-on" onclick="applyUpgrade()">Proceed</button>
-                    <button class="btn-off" onclick="cancelUpgrade()">Cancel</button>
+                    <span class="label">New version:</span>
+                    <span id="upgrade-version" class="value"></span>
                 </div>
             </div>
-            <div id="upgrade-prompt" class="actions">
-                <button class="btn-upgrade" onclick="showUpgradeDetails()">View Details</button>
+            <div id="upgrade-status" class="status-row">
+                <span class="value" id="upgrade-status-text" style="color:#8899aa;">Checking...</span>
+            </div>
+            <div class="actions">
+                <button id="upgrade-btn" class="btn-upgrade" onclick="checkForUpdateManual()" disabled>Check for Updates</button>
             </div>
             <div id="upgrade-progress" style="display:none;">
                 <p id="upgrade-progress-text">Downloading update...</p>
@@ -117,6 +138,31 @@
             </div>
         </section>
     </div>
+
+    <div id="update-modal" class="modal-overlay" style="display:none;" onclick="closeUpdateModal(event)">
+        <div class="modal">
+            <h2 id="modal-title">Update Available</h2>
+            <div class="status-row">
+                <span class="label">New version:</span>
+                <span class="value" id="modal-version"></span>
+            </div>
+            <div class="status-row">
+                <span class="label">Size:</span>
+                <span class="value" id="modal-size"></span>
+            </div>
+            <div class="status-row">
+                <a id="modal-notes-link" href="#" target="_blank" class="release-link">Release notes</a>
+            </div>
+            <div id="modal-actions" class="actions" style="justify-content:flex-end;">
+                <button class="btn-off" onclick="closeUpdateModal()">Cancel</button>
+                <button class="btn-on" onclick="applyUpgradeFromModal()">Proceed</button>
+            </div>
+            <div id="modal-progress" style="display:none;">
+                <p id="modal-progress-text">Downloading and verifying update...</p>
+            </div>
+        </div>
+    </div>
+
     <div id="toast" class="toast hidden"></div>
     <script src="/app.js"></script>
 </body>
