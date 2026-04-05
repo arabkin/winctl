@@ -29,7 +29,7 @@ cd e2e && npm install && npx playwright install chromium && npx playwright test
 - `service/` — Windows `svc.Handler` implementation with build-tag stubs for non-Windows
 - `server/` — HTTP server (`server.go`), session-based auth with Basic Auth middleware (`auth.go`), REST handlers (`handlers.go`)
 - `scheduler/` — timer goroutines for scheduled/one-shot restart and lock actions; accepts injectable `ExecFuncs` for testability
-- `executor/` — OS command wrappers (`shutdown /r /t 60`, `LockWorkStation` via Win32 API) with build-tag split (`*_windows.go`/`*_other.go`) plus `DryRestart()` / `DryLockScreen()` variants that log instead of executing
+- `executor/` — OS command wrappers (`shutdown /r /t 60`, `rundll32 LockWorkStation` launched in user session via `CreateProcessAsUser`) with build-tag split (`*_windows.go`/`*_other.go`) plus `DryRestart()` / `DryLockScreen()` variants that log instead of executing
 - `config/` — JSON config loader with base64 password, auto-creates defaults on first run; `testing.go` exports `NewForTest()` helper
 - `state/` — thread-safe in-memory state with `sync.RWMutex`
 - `web/` — `go:embed` static files (HTML/CSS/JS dashboard)
@@ -72,7 +72,7 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 
 ## Known Constraints
 
-- Screen lock uses `WTSQueryUserToken` + `CreateProcessAsUser` to lock the active console session; works from SYSTEM
+- Screen lock uses `WTSQueryUserToken` + `CreateProcessAsUser` to run `rundll32 LockWorkStation` in the active console session; works from SYSTEM
 - `shutdown /r /t 60` works from any session including SYSTEM
 - Config reload updates credentials and intervals; port changes require restart
 - Schedule intent (which schedules are enabled) persists to `state.json` next to `config.json`; restored on startup. One-shot timers are not persisted.

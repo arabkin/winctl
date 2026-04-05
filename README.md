@@ -35,7 +35,7 @@ Total time from button press to actual restart: **~2 minutes**.
 **Screen lock** has a single stage:
 
 1. **App countdown (60s)** — same dashboard timer, cancellable via Reset All.
-2. **Immediate lock** — when the timer fires, the screen locks instantly via Win32 API. No additional delay or notification.
+2. **Immediate lock** — when the timer fires, the screen locks instantly (runs `LockWorkStation` in the active user's session). No additional delay or notification.
 
 For **scheduled** (recurring) actions, the app picks a random interval within the configured min/max range. When the interval elapses, the action fires immediately — no additional app countdown. For restart, the Windows 60-second shutdown notice still applies.
 
@@ -150,7 +150,7 @@ The **upgrade** command replaces the installed binary without touching the servi
 
 #### Screen lock note
 
-The service runs as SYSTEM by default. Screen lock works by detecting the active console session and launching `LockWorkStation` in the logged-in user's context via Win32 API (`WTSQueryUserToken` + `CreateProcessAsUser`). No special service account configuration is needed.
+The service runs as SYSTEM by default. Screen lock works by detecting the active console session, obtaining the logged-in user's token (`WTSQueryUserToken`), and launching `rundll32 LockWorkStation` in that session via `CreateProcessAsUser`. No special service account configuration is needed.
 
 #### Network access (home network only)
 
