@@ -48,6 +48,27 @@ h2 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #a0c4ff; }
 .card-config { border-color: #1a5276; }
 .config-toggle { cursor: pointer; user-select: none; }
 .config-toggle:hover { color: #c0d8f0; }
+.cfg-input {
+    background: #1a1a2e;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    color: #e0e0e0;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.85rem;
+    width: 80px;
+    text-align: right;
+}
+.cfg-input:focus { border-color: #a0c4ff; outline: none; }
+.cfg-input-error { border-color: #e4b7b7 !important; background: #3a1a1a !important; }
+select.cfg-input { width: 100px; }
+.cfg-hint {
+    font-size: 0.75rem;
+    color: #b5830a;
+    padding: 0.4rem 0;
+}
+.btn-on:disabled { background: #3a3a4e; color: #666; cursor: default; }
+.btn-reset-defaults { background: #533483; font-size: 0.8rem; }
+.btn-reset-defaults:hover { background: #6a44a0; }
 .card-global { border-color: #533483; }
 
 .status-row {
@@ -81,7 +102,7 @@ button:hover { background: #1a4a7a; }
 button:active { transform: scale(0.97); }
 
 .btn-on { background: #2d6a4f; }
-.btn-on:hover { background: #3a8a64; }
+.btn-on:hover:not(:disabled) { background: #3a8a64; }
 .btn-off { background: #6a2d2d; }
 .btn-off:hover { background: #8a3a3a; }
 .btn-reset { background: #533483; width: 100%; }
@@ -102,7 +123,8 @@ button:active { transform: scale(0.97); }
 
 .card-upgrade { border-color: #b5830a; }
 .btn-upgrade { background: #b5830a; width: 100%; }
-.btn-upgrade:hover { background: #d4a017; }
+.btn-upgrade:hover:not(:disabled) { background: #d4a017; }
+.btn-upgrade:disabled { background: #3a3a4e; color: #666; cursor: default; }
 .upgrade-body {
     background: #1a1a2e;
     border-radius: 6px;
@@ -114,3 +136,28 @@ button:active { transform: scale(0.97); }
     max-height: 200px;
     overflow-y: auto;
 }
+
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+.modal {
+    background: #16213e;
+    border: 1px solid #0f3460;
+    border-radius: 10px;
+    padding: 1.5rem;
+    width: 90%;
+    max-width: 480px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+.modal h2 {
+    margin-bottom: 1rem;
+    color: #b5830a;
+}
+.release-link { color: #a0c4ff; font-size: 0.85rem; text-decoration: none; }
+.release-link:hover { text-decoration: underline; }
