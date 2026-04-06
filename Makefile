@@ -1,4 +1,4 @@
-.PHONY: build build-windows build-all run run-dry test test-race test-verbose test-cover e2e e2e-install clean tidy lint version release help
+.PHONY: build build-windows build-all run run-dry test test-race test-verbose test-cover e2e e2e-install clean tidy lint version version-info bump-major bump-minor bump-patch release help
 
 # --- Variables ---
 BINARY      := winctl
@@ -78,12 +78,37 @@ clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR)
 	rm -rf e2e/node_modules e2e/test-results e2e/playwright-report
 
-# --- Release ---
+# --- Version & Release ---
 
 VERSION ?= $(shell grep 'AppVersion' cmd/root.go | head -1 | sed 's/.*"\(.*\)"/\1/')
 
 version: ## Show current version
 	@echo $(VERSION)
+
+version-info: ## Show current version and next bump candidates
+	@echo "Current version: $(VERSION)"
+	@echo ""
+	@echo "Bump candidates:"
+	@echo "  Patch: $(shell echo $(VERSION) | awk -F. '{print $$1 "." $$2 "." $$3+1}')  (bugfix)"
+	@echo "  Minor: $(shell echo $(VERSION) | awk -F. '{print $$1 "." $$2+1 ".0"}')  (new feature)"
+	@echo "  Major: $(shell echo $(VERSION) | awk -F. '{print $$1+1 ".0.0"}')  (breaking change)"
+	@echo ""
+	@echo "Usage: make bump-patch | bump-minor | bump-major"
+
+bump-patch: ## Bump patch version (bugfix: 1.2.3 -> 1.2.4)
+	$(eval NEW := $(shell echo $(VERSION) | awk -F. '{print $$1 "." $$2 "." $$3+1}'))
+	@sed -i '' 's/var AppVersion = "$(VERSION)"/var AppVersion = "$(NEW)"/' cmd/root.go
+	@echo "$(VERSION) -> $(NEW)"
+
+bump-minor: ## Bump minor version (feature: 1.2.3 -> 1.3.0)
+	$(eval NEW := $(shell echo $(VERSION) | awk -F. '{print $$1 "." $$2+1 ".0"}'))
+	@sed -i '' 's/var AppVersion = "$(VERSION)"/var AppVersion = "$(NEW)"/' cmd/root.go
+	@echo "$(VERSION) -> $(NEW)"
+
+bump-major: ## Bump major version (breaking: 1.2.3 -> 2.0.0)
+	$(eval NEW := $(shell echo $(VERSION) | awk -F. '{print $$1+1 ".0.0"}'))
+	@sed -i '' 's/var AppVersion = "$(VERSION)"/var AppVersion = "$(NEW)"/' cmd/root.go
+	@echo "$(VERSION) -> $(NEW)"
 
 release: build-windows ## Create a GitHub release (VERSION=x.y.z to override)
 	@echo "Releasing v$(VERSION)..."
