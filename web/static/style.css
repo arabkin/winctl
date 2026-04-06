@@ -105,8 +105,6 @@ button:active { transform: scale(0.97); }
 .btn-on:hover:not(:disabled) { background: #3a8a64; }
 .btn-off { background: #6a2d2d; }
 .btn-off:hover { background: #8a3a3a; }
-.btn-pending { background: #b5830a; color: #fff3cd; cursor: default; }
-.btn-pending:hover { background: #b5830a; }
 .btn-reset { background: #533483; width: 100%; }
 .btn-reset:hover { background: #6a44a0; }
 .btn-reload { background: #1a5276; width: 100%; }

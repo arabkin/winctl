@@ -123,6 +123,10 @@ func (h *handlers) cancel(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]string{"error": "invalid JSON"})
 		return
 	}
+	if !req.RestartOnce && !req.RestartSchedule && !req.LockOnce && !req.LockSchedule {
+		writeJSON(w, map[string]string{"status": "nothing to cancel"})
+		return
+	}
 	h.scheduler.Cancel(req)
 	slog.Info("activities cancelled", "restart_once", req.RestartOnce, "restart_schedule", req.RestartSchedule, "lock_once", req.LockOnce, "lock_schedule", req.LockSchedule)
 	writeJSON(w, map[string]string{"status": "cancelled"})
