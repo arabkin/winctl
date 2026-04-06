@@ -21,6 +21,52 @@ function api(method, path) {
         });
 }
 
+// Track current state for toggle buttons
+var _state = {};
+
+function cancelActivities(obj) {
+    fetch('/api/cancel', { method: 'POST', body: JSON.stringify(obj) })
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(data => { if (data !== null) poll(); })
+        .catch(err => { showToast('Cancel failed: ' + err.message, 'error'); });
+}
+
+function toggleRestartOnce() {
+    if (_state.restart_pending_once) {
+        cancelActivities({restart_once: true});
+    } else {
+        api('POST', '/api/restart/once');
+    }
+}
+
+function toggleRestartSchedule() {
+    if (_state.restart_schedule_active) {
+        cancelActivities({restart_schedule: true});
+    } else {
+        api('POST', '/api/restart/schedule');
+    }
+}
+
+function toggleLockOnce() {
+    if (_state.lock_pending_once) {
+        cancelActivities({lock_once: true});
+    } else {
+        api('POST', '/api/lock/once');
+    }
+}
+
+function toggleLockSchedule() {
+    if (_state.lock_schedule_active) {
+        cancelActivities({lock_schedule: true});
+    } else {
+        api('POST', '/api/lock/schedule');
+    }
+}
+
 function toggleConfig() {
     var body = document.getElementById("config-body");
     var arrow = document.getElementById("config-arrow");
@@ -191,6 +237,8 @@ function formatCountdown(isoStr) {
 }
 
 function updateUI(data) {
+    _state = data;
+
     if (data.version) {
         document.getElementById("version-badge").textContent = "v" + data.version;
     }
@@ -204,42 +252,66 @@ function updateUI(data) {
         modeBadge.className = "badge badge-mode-real";
     }
 
-    const rSched = document.getElementById("restart-schedule-status");
+    // Restart schedule + toggle button
+    var rSched = document.getElementById("restart-schedule-status");
+    var rSchedBtn = document.getElementById("restart-sched-btn");
     if (data.restart_schedule_active) {
         var rCountdown = formatCountdown(data.restart_next_at);
         rSched.textContent = rCountdown ? "Active — next in " + rCountdown : "Active — scheduling...";
         rSched.style.color = "#b7e4c7";
+        rSchedBtn.textContent = "Schedule Off";
+        rSchedBtn.className = "btn-off";
     } else {
         rSched.textContent = "Idle";
         rSched.style.color = "";
+        rSchedBtn.textContent = "Schedule On";
+        rSchedBtn.className = "btn-on";
     }
 
-    const rOnce = document.getElementById("restart-once-status");
+    // Restart one-shot + toggle button
+    var rOnce = document.getElementById("restart-once-status");
+    var rOnceBtn = document.getElementById("restart-once-btn");
     if (data.restart_pending_once) {
         rOnce.textContent = "Pending — in " + formatCountdown(data.restart_once_at);
         rOnce.style.color = "#ffd166";
+        rOnceBtn.textContent = "Cancel Restart";
+        rOnceBtn.className = "btn-off";
     } else {
         rOnce.textContent = "None";
         rOnce.style.color = "";
+        rOnceBtn.textContent = "Restart Now";
+        rOnceBtn.className = "btn-on";
     }
 
-    const lSched = document.getElementById("lock-schedule-status");
+    // Lock schedule + toggle button
+    var lSched = document.getElementById("lock-schedule-status");
+    var lSchedBtn = document.getElementById("lock-sched-btn");
     if (data.lock_schedule_active) {
         var lCountdown = formatCountdown(data.lock_next_at);
         lSched.textContent = lCountdown ? "Active — next in " + lCountdown : "Active — scheduling...";
         lSched.style.color = "#b7e4c7";
+        lSchedBtn.textContent = "Schedule Off";
+        lSchedBtn.className = "btn-off";
     } else {
         lSched.textContent = "Idle";
         lSched.style.color = "";
+        lSchedBtn.textContent = "Schedule On";
+        lSchedBtn.className = "btn-on";
     }
 
-    const lOnce = document.getElementById("lock-once-status");
+    // Lock one-shot + toggle button
+    var lOnce = document.getElementById("lock-once-status");
+    var lOnceBtn = document.getElementById("lock-once-btn");
     if (data.lock_pending_once) {
         lOnce.textContent = "Pending — in " + formatCountdown(data.lock_once_at);
         lOnce.style.color = "#ffd166";
+        lOnceBtn.textContent = "Cancel Lock";
+        lOnceBtn.className = "btn-off";
     } else {
         lOnce.textContent = "None";
         lOnce.style.color = "";
+        lOnceBtn.textContent = "Lock Now";
+        lOnceBtn.className = "btn-on";
     }
 
     var upgradeBtn = document.getElementById("upgrade-btn");

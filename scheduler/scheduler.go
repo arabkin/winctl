@@ -276,21 +276,55 @@ func (s *Scheduler) UpdateIntervals(restart, lock IntervalRange) {
 	slog.Info("scheduler intervals updated", "restart_min", restart.MinMinutes, "restart_max", restart.MaxMinutes, "lock_min", lock.MinMinutes, "lock_max", lock.MaxMinutes)
 }
 
-func (s *Scheduler) ResetAll() {
-	s.StopRestartSchedule()
-	s.StopLockSchedule()
-
+func (s *Scheduler) CancelRestartOnce() {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.restartOnceCancel != nil {
 		s.restartOnceCancel()
 		s.restartOnceCancel = nil
 	}
+}
+
+func (s *Scheduler) CancelLockOnce() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.lockOnceCancel != nil {
 		s.lockOnceCancel()
 		s.lockOnceCancel = nil
 	}
-	s.mu.Unlock()
+}
 
+// CancelRequest specifies which activities to cancel.
+type CancelRequest struct {
+	RestartOnce     bool `json:"restart_once"`
+	RestartSchedule bool `json:"restart_schedule"`
+	LockOnce        bool `json:"lock_once"`
+	LockSchedule    bool `json:"lock_schedule"`
+}
+
+// Cancel stops the specified activities.
+func (s *Scheduler) Cancel(req CancelRequest) {
+	if req.RestartSchedule {
+		s.StopRestartSchedule()
+	}
+	if req.LockSchedule {
+		s.StopLockSchedule()
+	}
+	if req.RestartOnce {
+		s.CancelRestartOnce()
+	}
+	if req.LockOnce {
+		s.CancelLockOnce()
+	}
+}
+
+func (s *Scheduler) ResetAll() {
+	s.Cancel(CancelRequest{
+		RestartOnce:     true,
+		RestartSchedule: true,
+		LockOnce:        true,
+		LockSchedule:    true,
+	})
 	s.state.Reset()
 	slog.Info("all schedules and pending actions reset")
 }

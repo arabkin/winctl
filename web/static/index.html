@@ -29,9 +29,8 @@
                 <span id="restart-once-status" class="value">None</span>
             </div>
             <div class="actions">
-                <button onclick="api('POST','/api/restart/once')">Restart Now (60s delay)</button>
-                <button onclick="api('POST','/api/restart/schedule')" class="btn-on">Schedule On</button>
-                <button onclick="api('DELETE','/api/restart/schedule')" class="btn-off">Schedule Off</button>
+                <button id="restart-once-btn" class="btn-on" onclick="toggleRestartOnce()">Restart Now</button>
+                <button id="restart-sched-btn" class="btn-on" onclick="toggleRestartSchedule()">Schedule On</button>
             </div>
         </section>
 
@@ -46,9 +45,8 @@
                 <span id="lock-once-status" class="value">None</span>
             </div>
             <div class="actions">
-                <button onclick="api('POST','/api/lock/once')">Lock Now (60s delay)</button>
-                <button onclick="api('POST','/api/lock/schedule')" class="btn-on">Schedule On</button>
-                <button onclick="api('DELETE','/api/lock/schedule')" class="btn-off">Schedule Off</button>
+                <button id="lock-once-btn" class="btn-on" onclick="toggleLockOnce()">Lock Now</button>
+                <button id="lock-sched-btn" class="btn-on" onclick="toggleLockSchedule()">Schedule On</button>
             </div>
         </section>
 

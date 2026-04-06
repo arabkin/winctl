@@ -61,7 +61,8 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 | POST/DELETE | `/api/restart/schedule` | Toggle recurring restart |
 | POST | `/api/lock/once` | One-shot lock (60s) |
 | POST/DELETE | `/api/lock/schedule` | Toggle recurring lock |
-| POST | `/api/reset` | Cancel everything |
+| POST | `/api/cancel` | Cancel specific activities (JSON: restart_once, restart_schedule, lock_once, lock_schedule) |
+| POST | `/api/reset` | Cancel everything and reset state |
 | GET | `/api/config` | Current config values (excludes password) |
 | POST | `/api/config/reload` | Reload config from disk (updates auth, intervals, log level) |
 | POST | `/api/config/loglevel?level=` | Set log level (debug, info, error); persists to config |
