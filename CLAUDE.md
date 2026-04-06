@@ -81,7 +81,7 @@ All require Basic Auth (session cookie established on first auth). UI at `/`.
 - `uninstall` removes both the service and the firewall rule
 - `upgrade` replaces the installed binary in-place: stops service → backs up old binary (.bak) → copies new binary → starts service; must be run from a different path than the installed binary
 - Server binds `0.0.0.0:<port>` (all interfaces); firewall rule restricts access to private/home networks
-- Login locks out after 3 failed attempts; only service restart clears the lockout (no timed reset)
+- Login locks out per-IP after 3 failed attempts for 15 minutes; auto-unlocks after timeout; successful login resets counter
 - Auto-update checks GitHub API unauthenticated (rate limit: 60 req/hour per IP)
 - Update binary is SHA256-verified against the GitHub release asset digest
 - `updater/` — checks GitHub releases API, downloads binary, verifies SHA256; wired into server and polled every 6 hours

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -54,36 +55,74 @@ func (ch *configHolder) setLogLevel(level string) error {
 	return nil
 }
 
-const maxFailedAttempts = 3
+const (
+	maxFailedAttempts = 3
+	lockoutDuration   = 15 * time.Minute
+)
+
+type ipRecord struct {
+	failures int
+	lockedAt time.Time
+}
 
 type loginTracker struct {
-	mu       sync.Mutex
-	failures int
-	locked   bool
+	mu sync.Mutex
+	ips map[string]*ipRecord
+}
+
+func newLoginTracker() *loginTracker {
+	return &loginTracker{ips: make(map[string]*ipRecord)}
+}
+
+func stripPort(addr string) string {
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }
 
 func (lt *loginTracker) recordFailure(remoteAddr string) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	lt.failures++
-	slog.Error("login failed", "remote_addr", remoteAddr, "attempt", lt.failures, "max_attempts", maxFailedAttempts)
-	if lt.failures >= maxFailedAttempts {
-		lt.locked = true
-		slog.Error("authentication locked", "failed_attempts", maxFailedAttempts)
+	ip := stripPort(remoteAddr)
+	rec, ok := lt.ips[ip]
+	if !ok {
+		rec = &ipRecord{}
+		lt.ips[ip] = rec
+	}
+	rec.failures++
+	slog.Error("login failed", "ip", ip, "attempt", rec.failures, "max_attempts", maxFailedAttempts)
+	if rec.failures >= maxFailedAttempts {
+		rec.lockedAt = time.Now()
+		slog.Error("IP locked out", "ip", ip, "duration", lockoutDuration)
 	}
 }
 
 func (lt *loginTracker) recordSuccess(remoteAddr string) {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	slog.Info("login successful", "remote_addr", remoteAddr)
-	lt.failures = 0
+	ip := stripPort(remoteAddr)
+	delete(lt.ips, ip)
+	slog.Info("login successful", "ip", ip)
 }
 
-func (lt *loginTracker) isLocked() bool {
+func (lt *loginTracker) isLocked(remoteAddr string) bool {
 	lt.mu.Lock()
 	defer lt.mu.Unlock()
-	return lt.locked
+	ip := stripPort(remoteAddr)
+	rec, ok := lt.ips[ip]
+	if !ok {
+		return false
+	}
+	if rec.failures < maxFailedAttempts {
+		return false
+	}
+	if time.Since(rec.lockedAt) > lockoutDuration {
+		delete(lt.ips, ip)
+		slog.Info("IP lockout expired", "ip", ip)
+		return false
+	}
+	return true
 }
 
 type session struct {
@@ -153,8 +192,8 @@ func (s *sessionStore) remove(token string) {
 
 func basicAuth(ch *configHolder, store *sessionStore, tracker *loginTracker, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if tracker.isLocked() {
-			http.Error(w, "Too many failed login attempts. Restart the service to unlock.", http.StatusForbidden)
+		if tracker.isLocked(r.RemoteAddr) {
+			http.Error(w, "Too many failed login attempts. Try again in 15 minutes.", http.StatusForbidden)
 			return
 		}
 
