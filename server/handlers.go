@@ -349,7 +349,16 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("update downloaded", "path", tmpPath, "version", info.Version)
-	writeJSON(w, map[string]string{"status": "downloaded", "version": info.Version})
+	writeJSON(w, map[string]string{
+		"status":  "upgrading",
+		"version": info.Version,
+		"message": "Service will restart in approximately 5 seconds",
+	})
+
+	// Flush response before triggering upgrade (service will be killed).
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 
 	// Trigger in-place upgrade asynchronously (Windows: stop → replace → restart service).
 	go applyUpgrade(tmpPath)
