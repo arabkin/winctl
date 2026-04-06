@@ -16,7 +16,10 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
-const serviceName = "WinCtlSvc"
+const (
+	serviceName     = "WinCtlSvc"
+	detachedProcess = 0x00000008 // DETACHED_PROCESS creation flag
+)
 
 var upgradeInProgress atomic.Bool
 
@@ -71,8 +74,8 @@ func applyUpgrade(tmpPath string) {
 	}
 	slog.Info("upgrade: backed up old binary", "path", backupPath)
 
-	// Write upgrade script to a temp .bat file for auditability and proper escaping.
-	// Uses && so failures halt the chain. Includes rollback on net start failure.
+	// Write upgrade script to a temp .bat file for auditability.
+	// Uses if-errorlevel checks so failures trigger rollback.
 	// Logs output to a file next to the binary for post-mortem.
 	logFile := installedPath + ".upgrade.log"
 	scriptContent := "@echo off\r\n" +
@@ -99,7 +102,8 @@ func applyUpgrade(tmpPath string) {
 		")\r\n" +
 		":cleanup\r\n" +
 		"del \"" + tmpPath + "\" >nul 2>&1\r\n" +
-		"echo Upgrade complete >> \"" + logFile + "\"\r\n"
+		"echo Upgrade complete >> \"" + logFile + "\"\r\n" +
+		"del \"%~f0\" >nul 2>&1\r\n" // bat deletes itself
 
 	batPath := filepath.Join(os.TempDir(), "winctl-upgrade.bat")
 	if err := os.WriteFile(batPath, []byte(scriptContent), 0600); err != nil {
@@ -110,7 +114,7 @@ func applyUpgrade(tmpPath string) {
 
 	cmd := exec.Command("cmd", "/c", batPath)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x00000008, // DETACHED_PROCESS
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | detachedProcess,
 	}
 	if err := cmd.Start(); err != nil {
 		slog.Error("upgrade: failed to start upgrade script", "error", err)
@@ -149,9 +153,9 @@ func copyFileForUpgrade(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = out.Close() }()
 
 	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
 		return err
 	}
 	return out.Close()
