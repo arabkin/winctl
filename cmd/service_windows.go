@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 	"winctl/config"
 	"winctl/service"
@@ -151,7 +152,7 @@ func upgradeService() {
 		s.Close()
 		log.Fatalf("failed to read service config: %v", err)
 	}
-	installedPath := cfg.BinaryPathName
+	installedPath := parseBinaryPath(cfg.BinaryPathName)
 
 	newPath, err := os.Executable()
 	if err != nil {
@@ -214,15 +215,15 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer in.Close()
+	defer func() { _ = in.Close() }()
 
 	out, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
 	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
 		return err
 	}
 	return out.Close()
@@ -246,4 +247,19 @@ func stopService() {
 		log.Fatalf("failed to stop service: %v", err)
 	}
 	fmt.Printf("Service %q stopped.\n", service.ServiceName)
+}
+
+// parseBinaryPath extracts the executable path from a BinaryPathName that may
+// include arguments. Handles quoted paths like `"C:\path\winctl.exe" run`.
+func parseBinaryPath(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, `"`) {
+		if end := strings.Index(raw[1:], `"`); end >= 0 {
+			return raw[1 : end+1]
+		}
+	}
+	if i := strings.IndexByte(raw, ' '); i >= 0 {
+		return raw[:i]
+	}
+	return raw
 }

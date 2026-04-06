@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 	"winctl/config"
 	"winctl/logging"
 	"winctl/scheduler"
@@ -333,8 +334,23 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	// Check upgrade not already in progress before downloading.
+	if !upgradeInProgress.CompareAndSwap(false, true) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		writeJSON(w, map[string]string{"error": "upgrade already in progress"})
+		return
+	}
+
+	// Extend deadline — download may take longer than the default 10s WriteTimeout.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Now().Add(5 * time.Minute)); err != nil {
+		slog.Warn("upgrade: could not extend write deadline, large downloads may timeout", "error", err)
+	}
+
 	info := h.updater.Cached()
 	if !info.Available {
+		upgradeInProgress.Store(false)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(w, map[string]string{"status": "no update available"})
@@ -342,6 +358,7 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpPath, err := h.updater.Download(info)
 	if err != nil {
+		upgradeInProgress.Store(false)
 		slog.Error("update download failed", "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -349,5 +366,17 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slog.Info("update downloaded", "path", tmpPath, "version", info.Version)
-	writeJSON(w, map[string]string{"status": "downloaded", "version": info.Version})
+	writeJSON(w, map[string]string{
+		"status":  "upgrading",
+		"version": info.Version,
+		"message": "Service will restart in approximately 5 seconds",
+	})
+
+	// Flush response before triggering upgrade (service will be killed).
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	// Trigger in-place upgrade asynchronously (Windows: stop → replace → restart service).
+	go applyUpgrade(tmpPath)
 }
