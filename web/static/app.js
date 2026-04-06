@@ -255,7 +255,7 @@ function updateUI(data) {
         document.getElementById("upgrade-info").style.display = "none";
         document.getElementById("upgrade-status").style.display = "";
         document.getElementById("upgrade-status-text").textContent = "You're running the latest version";
-        upgradeBtn.disabled = true;
+        upgradeBtn.disabled = false;
         upgradeBtn.textContent = "Check for Updates";
     }
 }
