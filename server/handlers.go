@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"time"
 	"winctl/config"
 	"winctl/logging"
 	"winctl/scheduler"
@@ -332,6 +333,10 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
+	}
+	// Extend deadline — download may take longer than the default 10s WriteTimeout.
+	if rc := http.NewResponseController(w); rc != nil {
+		_ = rc.SetWriteDeadline(time.Now().Add(5 * time.Minute))
 	}
 	info := h.updater.Cached()
 	if !info.Available {

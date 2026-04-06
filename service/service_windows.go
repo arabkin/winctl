@@ -31,6 +31,8 @@ func (s *WinCtlService) Execute(args []string, req <-chan svc.ChangeRequest, sta
 	const accepted = svc.AcceptStop | svc.AcceptShutdown
 	status <- svc.Status{State: svc.StartPending}
 
+	server.ServiceName = ServiceName
+
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		slog.Error("config load error, service cannot start", "error", err)

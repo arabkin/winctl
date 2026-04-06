@@ -16,10 +16,11 @@ import (
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
-const (
-	serviceName     = "WinCtlSvc"
-	detachedProcess = 0x00000008 // DETACHED_PROCESS creation flag
-)
+const detachedProcess = 0x00000008 // DETACHED_PROCESS creation flag
+
+// ServiceName is set by the service package before the server starts.
+// Avoids import cycle (service imports server).
+var ServiceName = "WinCtlSvc"
 
 var upgradeInProgress atomic.Bool
 
@@ -46,7 +47,7 @@ func applyUpgrade(tmpPath string) {
 	}
 	defer m.Disconnect()
 
-	s, err := m.OpenService(serviceName)
+	s, err := m.OpenService(ServiceName)
 	if err != nil {
 		slog.Error("upgrade: service not found", "error", err)
 		cleanup()
@@ -81,7 +82,7 @@ func applyUpgrade(tmpPath string) {
 	scriptContent := "@echo off\r\n" +
 		"timeout /t 3 /nobreak >nul\r\n" +
 		"echo Stopping service... >> \"" + logFile + "\"\r\n" +
-		"net stop " + serviceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"net stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
 		"  echo WARNING: net stop failed, continuing anyway >> \"" + logFile + "\"\r\n" +
 		")\r\n" +
@@ -90,15 +91,15 @@ func applyUpgrade(tmpPath string) {
 		"if errorlevel 1 (\r\n" +
 		"  echo ERROR: copy failed, restoring backup >> \"" + logFile + "\"\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
-		"  net start " + serviceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  net start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"  goto :cleanup\r\n" +
 		")\r\n" +
 		"echo Starting service with new binary... >> \"" + logFile + "\"\r\n" +
-		"net start " + serviceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"net start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
 		"  echo ERROR: start failed, restoring backup >> \"" + logFile + "\"\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
-		"  net start " + serviceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  net start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		")\r\n" +
 		":cleanup\r\n" +
 		"del \"" + tmpPath + "\" >nul 2>&1\r\n" +
