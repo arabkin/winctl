@@ -57,11 +57,12 @@ func (ch *configHolder) setLogLevel(level string) error {
 
 const (
 	maxFailedAttempts = 3
+	failureWindow     = 5 * time.Minute
 	lockoutDuration   = 15 * time.Minute
 )
 
 type ipRecord struct {
-	failures int
+	attempts []time.Time
 	lockedAt time.Time
 }
 
@@ -90,10 +91,20 @@ func (lt *loginTracker) recordFailure(remoteAddr string) {
 		rec = &ipRecord{}
 		lt.ips[ip] = rec
 	}
-	rec.failures++
-	slog.Error("login failed", "ip", ip, "attempt", rec.failures, "max_attempts", maxFailedAttempts)
-	if rec.failures >= maxFailedAttempts {
-		rec.lockedAt = time.Now()
+	now := time.Now()
+	cutoff := now.Add(-failureWindow)
+	// Drop attempts outside the sliding window.
+	recent := rec.attempts[:0]
+	for _, t := range rec.attempts {
+		if t.After(cutoff) {
+			recent = append(recent, t)
+		}
+	}
+	recent = append(recent, now)
+	rec.attempts = recent
+	slog.Error("login failed", "ip", ip, "recent_attempts", len(rec.attempts), "max_attempts", maxFailedAttempts, "window", failureWindow)
+	if len(rec.attempts) >= maxFailedAttempts {
+		rec.lockedAt = now
 		slog.Error("IP locked out", "ip", ip, "duration", lockoutDuration)
 	}
 }
@@ -114,7 +125,7 @@ func (lt *loginTracker) isLocked(remoteAddr string) bool {
 	if !ok {
 		return false
 	}
-	if rec.failures < maxFailedAttempts {
+	if len(rec.attempts) < maxFailedAttempts {
 		return false
 	}
 	if time.Since(rec.lockedAt) > lockoutDuration {
