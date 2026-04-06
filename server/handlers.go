@@ -334,12 +334,23 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// Extend deadline — download may take longer than the default 10s WriteTimeout.
-	if rc := http.NewResponseController(w); rc != nil {
-		_ = rc.SetWriteDeadline(time.Now().Add(5 * time.Minute))
+	// Check upgrade not already in progress before downloading.
+	if !upgradeInProgress.CompareAndSwap(false, true) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		writeJSON(w, map[string]string{"error": "upgrade already in progress"})
+		return
 	}
+
+	// Extend deadline — download may take longer than the default 10s WriteTimeout.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Now().Add(5 * time.Minute)); err != nil {
+		slog.Warn("upgrade: could not extend write deadline, large downloads may timeout", "error", err)
+	}
+
 	info := h.updater.Cached()
 	if !info.Available {
+		upgradeInProgress.Store(false)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(w, map[string]string{"status": "no update available"})
@@ -347,6 +358,7 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpPath, err := h.updater.Download(info)
 	if err != nil {
+		upgradeInProgress.Store(false)
 		slog.Error("update download failed", "error", err)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
