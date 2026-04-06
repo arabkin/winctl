@@ -350,4 +350,7 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 	}
 	slog.Info("update downloaded", "path", tmpPath, "version", info.Version)
 	writeJSON(w, map[string]string{"status": "downloaded", "version": info.Version})
+
+	// Trigger in-place upgrade asynchronously (Windows: stop → replace → restart service).
+	go applyUpgrade(tmpPath)
 }
