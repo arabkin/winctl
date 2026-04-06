@@ -18,7 +18,7 @@ import (
 func New(cfg *config.Config, configPath string, st *state.State, sched *scheduler.Scheduler, upd *updater.Updater, version string) *http.Server {
 	store := newSessionStore(cfg.SessionTimeoutMinutes)
 	ch := newConfigHolder(cfg, configPath)
-	tracker := &loginTracker{}
+	tracker := newLoginTracker()
 	h := &handlers{state: st, scheduler: sched, sessions: store, config: ch, updater: upd, version: version}
 
 	mux := http.NewServeMux()
