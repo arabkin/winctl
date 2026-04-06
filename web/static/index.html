@@ -132,7 +132,7 @@
         <section class="card card-global">
             <h2>Global</h2>
             <div class="actions">
-                <button onclick="api('POST','/api/reset')" class="btn-reset">Reset All</button>
+                <button onclick="cancelActivities({restart_once:true,restart_schedule:true,lock_once:true,lock_schedule:true})" class="btn-reset">Reset All</button>
             </div>
         </section>
     </div>

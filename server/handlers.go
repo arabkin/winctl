@@ -111,6 +111,23 @@ func (h *handlers) reset(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]string{"status": "all settings reset"})
 }
 
+func (h *handlers) cancel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req scheduler.CancelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		writeJSON(w, map[string]string{"error": "invalid JSON"})
+		return
+	}
+	h.scheduler.Cancel(req)
+	slog.Info("activities cancelled", "restart_once", req.RestartOnce, "restart_schedule", req.RestartSchedule, "lock_once", req.LockOnce, "lock_schedule", req.LockSchedule)
+	writeJSON(w, map[string]string{"status": "cancelled"})
+}
+
 func (h *handlers) logout(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

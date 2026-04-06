@@ -24,25 +24,44 @@ function api(method, path) {
 // Track current state for toggle buttons
 var _state = {};
 
+function cancelActivities(obj) {
+    fetch('/api/cancel', { method: 'POST', body: JSON.stringify(obj) })
+        .then(r => {
+            if (r.status === 401) { window.location.reload(); return null; }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            return r.json();
+        })
+        .then(data => { if (data !== null) poll(); })
+        .catch(err => { showToast('Cancel failed: ' + err.message, 'error'); });
+}
+
 function toggleRestartOnce() {
-    api('POST', '/api/restart/once');
+    if (_state.restart_pending_once) {
+        cancelActivities({restart_once: true});
+    } else {
+        api('POST', '/api/restart/once');
+    }
 }
 
 function toggleRestartSchedule() {
     if (_state.restart_schedule_active) {
-        api('DELETE', '/api/restart/schedule');
+        cancelActivities({restart_schedule: true});
     } else {
         api('POST', '/api/restart/schedule');
     }
 }
 
 function toggleLockOnce() {
-    api('POST', '/api/lock/once');
+    if (_state.lock_pending_once) {
+        cancelActivities({lock_once: true});
+    } else {
+        api('POST', '/api/lock/once');
+    }
 }
 
 function toggleLockSchedule() {
     if (_state.lock_schedule_active) {
-        api('DELETE', '/api/lock/schedule');
+        cancelActivities({lock_schedule: true});
     } else {
         api('POST', '/api/lock/schedule');
     }
@@ -255,15 +274,13 @@ function updateUI(data) {
     if (data.restart_pending_once) {
         rOnce.textContent = "Pending — in " + formatCountdown(data.restart_once_at);
         rOnce.style.color = "#ffd166";
-        rOnceBtn.textContent = "Pending...";
-        rOnceBtn.className = "btn-pending";
-        rOnceBtn.disabled = true;
+        rOnceBtn.textContent = "Cancel Restart";
+        rOnceBtn.className = "btn-off";
     } else {
         rOnce.textContent = "None";
         rOnce.style.color = "";
         rOnceBtn.textContent = "Restart Now";
         rOnceBtn.className = "btn-on";
-        rOnceBtn.disabled = false;
     }
 
     // Lock schedule + toggle button
@@ -288,15 +305,13 @@ function updateUI(data) {
     if (data.lock_pending_once) {
         lOnce.textContent = "Pending — in " + formatCountdown(data.lock_once_at);
         lOnce.style.color = "#ffd166";
-        lOnceBtn.textContent = "Pending...";
-        lOnceBtn.className = "btn-pending";
-        lOnceBtn.disabled = true;
+        lOnceBtn.textContent = "Cancel Lock";
+        lOnceBtn.className = "btn-off";
     } else {
         lOnce.textContent = "None";
         lOnce.style.color = "";
         lOnceBtn.textContent = "Lock Now";
         lOnceBtn.className = "btn-on";
-        lOnceBtn.disabled = false;
     }
 
     var upgradeBtn = document.getElementById("upgrade-btn");
