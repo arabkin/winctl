@@ -124,8 +124,15 @@ func applyUpgrade(tmpPath string) {
 		return
 	}
 	slog.Info("upgrade: script launched", "script", batPath, "log", logFile)
-	// Don't call cleanup() on success — the script handles temp file deletion.
-	// Don't reset upgradeInProgress — the service is about to be killed.
+
+	// The service should be killed by the bat script within ~10 seconds.
+	// If we're still alive after 30 seconds, the script failed — reset the flag.
+	go func() {
+		time.Sleep(30 * time.Second)
+		if upgradeInProgress.CompareAndSwap(true, false) {
+			slog.Error("upgrade: script did not restart service within 30s — upgrade may have failed, check " + logFile)
+		}
+	}()
 }
 
 // parseBinaryPath extracts the executable path from a BinaryPathName that may
