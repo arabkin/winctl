@@ -86,6 +86,10 @@ func applyUpgrade(tmpPath string) {
 		"ping -n 4 127.0.0.1 >nul\r\n" +
 		"echo Stopping service... >> \"" + logFile + "\"\r\n" +
 		"sc.exe stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"if errorlevel 1 (\r\n" +
+		"  echo WARNING: sc.exe stop returned error, continuing anyway >> \"" + logFile + "\"\r\n" +
+		")\r\n" +
+		"echo Waiting for service to stop... >> \"" + logFile + "\"\r\n" +
 		"ping -n 6 127.0.0.1 >nul\r\n" +
 		"echo Copying new binary... >> \"" + logFile + "\"\r\n" +
 		"copy /y \"" + tmpPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
@@ -97,8 +101,13 @@ func applyUpgrade(tmpPath string) {
 		")\r\n" +
 		"echo Starting service with new binary... >> \"" + logFile + "\"\r\n" +
 		"sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"echo Verifying service started... >> \"" + logFile + "\"\r\n" +
+		"ping -n 6 127.0.0.1 >nul\r\n" +
+		"sc.exe query " + ServiceName + " | find \"RUNNING\" >nul 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
-		"  echo ERROR: start failed, restoring backup >> \"" + logFile + "\"\r\n" +
+		"  echo ERROR: service not running after start, restoring backup >> \"" + logFile + "\"\r\n" +
+		"  sc.exe stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  ping -n 3 127.0.0.1 >nul\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
 		"  sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		")\r\n" +
