@@ -24,14 +24,38 @@ var ServiceName = "WinCtlSvc"
 
 var upgradeInProgress atomic.Bool
 
-// applyUpgrade replaces the installed service binary and restarts the service.
-// Must be called in a goroutine — blocks until the restart script is launched.
-func applyUpgrade(tmpPath string) {
-	if !upgradeInProgress.CompareAndSwap(false, true) {
-		slog.Warn("upgrade: already in progress, ignoring duplicate request")
-		return
+// preflightUpgradeCheck verifies the service manager is reachable and the
+// service exists. Returns empty string on success, error message on failure.
+func preflightUpgradeCheck() string {
+	m, err := mgr.Connect()
+	if err != nil {
+		return "cannot connect to service manager: " + err.Error()
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(ServiceName)
+	if err != nil {
+		return "service " + ServiceName + " not found: " + err.Error()
 	}
 
+	cfg, err := s.Config()
+	s.Close()
+	if err != nil {
+		return "cannot read service config: " + err.Error()
+	}
+
+	installedPath := parseBinaryPath(cfg.BinaryPathName)
+	if _, err := os.Stat(installedPath); err != nil {
+		return "installed binary not found at " + installedPath + ": " + err.Error()
+	}
+
+	slog.Info("upgrade preflight passed", "service", ServiceName, "binary", installedPath)
+	return ""
+}
+
+// applyUpgrade replaces the installed service binary and restarts the service.
+// Must be called in a goroutine. The caller (handler) already holds upgradeInProgress.
+func applyUpgrade(tmpPath string) {
 	cleanup := func() {
 		_ = os.Remove(tmpPath)
 		upgradeInProgress.Store(false)
@@ -81,39 +105,51 @@ func applyUpgrade(tmpPath string) {
 	logFile := installedPath + ".upgrade.log"
 	// Use ping for delay (timeout command fails in non-interactive SYSTEM context).
 	// Use sc instead of net for service control (more reliable from SYSTEM).
+	sn := ServiceName
 	scriptContent := "@echo off\r\n" +
 		"echo Upgrade started %date% %time% >> \"" + logFile + "\"\r\n" +
 		"ping -n 4 127.0.0.1 >nul\r\n" +
 		"echo Stopping service... >> \"" + logFile + "\"\r\n" +
-		"sc.exe stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
-		"if errorlevel 1 (\r\n" +
-		"  echo WARNING: sc.exe stop returned error, continuing anyway >> \"" + logFile + "\"\r\n" +
-		")\r\n" +
+		"sc.exe stop " + sn + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"echo Waiting for service to stop... >> \"" + logFile + "\"\r\n" +
 		"ping -n 6 127.0.0.1 >nul\r\n" +
-		"echo Copying new binary... >> \"" + logFile + "\"\r\n" +
+		"sc.exe query " + sn + " | find \"STOPPED\" >nul 2>&1\r\n" +
+		"if errorlevel 1 (\r\n" +
+		"  echo ERROR: service did not stop, aborting upgrade >> \"" + logFile + "\"\r\n" +
+		"  sc.exe start " + sn + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  goto :cleanup\r\n" +
+		")\r\n" +
+		"echo Service stopped. Copying new binary... >> \"" + logFile + "\"\r\n" +
 		"copy /y \"" + tmpPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
 		"  echo ERROR: copy failed, restoring backup >> \"" + logFile + "\"\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
-		"  sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  if errorlevel 1 (\r\n" +
+		"    echo FATAL: rollback copy failed — restore manually from .bak >> \"" + logFile + "\"\r\n" +
+		"    goto :cleanup\r\n" +
+		"  )\r\n" +
+		"  sc.exe start " + sn + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"  goto :cleanup\r\n" +
 		")\r\n" +
 		"echo Starting service with new binary... >> \"" + logFile + "\"\r\n" +
-		"sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"sc.exe start " + sn + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"echo Verifying service started... >> \"" + logFile + "\"\r\n" +
 		"ping -n 6 127.0.0.1 >nul\r\n" +
-		"sc.exe query " + ServiceName + " | find \"RUNNING\" >nul 2>&1\r\n" +
+		"sc.exe query " + sn + " | find \"RUNNING\" >nul 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
 		"  echo ERROR: service not running after start, restoring backup >> \"" + logFile + "\"\r\n" +
-		"  sc.exe stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  sc.exe stop " + sn + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"  ping -n 3 127.0.0.1 >nul\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
-		"  sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  if errorlevel 1 (\r\n" +
+		"    echo FATAL: rollback copy failed — restore manually from .bak >> \"" + logFile + "\"\r\n" +
+		"    goto :cleanup\r\n" +
+		"  )\r\n" +
+		"  sc.exe start " + sn + " >> \"" + logFile + "\" 2>&1\r\n" +
 		")\r\n" +
 		":cleanup\r\n" +
 		"del \"" + tmpPath + "\" >nul 2>&1\r\n" +
-		"echo Upgrade complete %date% %time% >> \"" + logFile + "\"\r\n" +
+		"echo Upgrade finished %date% %time% >> \"" + logFile + "\"\r\n" +
 		"del \"%~f0\" >nul 2>&1\r\n" // bat deletes itself
 
 	batPath := filepath.Join(os.TempDir(), "winctl-upgrade.bat")

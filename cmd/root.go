@@ -18,7 +18,7 @@ import (
 	"winctl/updater"
 )
 
-var AppVersion = "1.2.3"
+var AppVersion = "1.2.4"
 
 func Run() {
 	if len(os.Args) < 2 {
