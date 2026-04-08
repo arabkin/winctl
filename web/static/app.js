@@ -398,13 +398,13 @@ function applyUpgradeFromModal() {
                 showToast('Upgrade failed: ' + data.error, 'error');
                 return;
             }
-            showToast('Update v' + data.version + ' downloaded. Service restarting...', 'ok');
-            // Close modal after a brief delay, then wait for service to come back.
-            setTimeout(function() {
-                document.getElementById('update-modal').style.display = 'none';
-                document.getElementById('modal-actions').style.display = '';
-                document.getElementById('modal-progress').style.display = 'none';
-            }, 2000);
+            // Close modal immediately and show toast.
+            document.getElementById('update-modal').style.display = 'none';
+            document.getElementById('modal-actions').style.display = '';
+            document.getElementById('modal-progress').style.display = 'none';
+            // Hide the upgrade card — service will restart with new version.
+            document.getElementById('upgrade-card').style.display = 'none';
+            showToast('Update v' + data.version + ' applied. Service restarting...', 'ok');
         })
         .catch(function(err) {
             document.getElementById('modal-progress-text').textContent = 'Error: ' + err.message;
