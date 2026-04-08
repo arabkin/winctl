@@ -103,6 +103,7 @@ func applyUpgrade(tmpPath string) {
 	// Use ping for delay (timeout command fails in non-interactive SYSTEM context).
 	// Use sc instead of net for service control (more reliable from SYSTEM).
 	sn := ServiceName
+	taskName := "WinCtlUpgrade"
 	scriptContent := "@echo off\r\n" +
 		"echo Upgrade started %date% %time% >> \"" + logFile + "\"\r\n" +
 		"ping -n 4 127.0.0.1 >nul\r\n" +
@@ -146,7 +147,7 @@ func applyUpgrade(tmpPath string) {
 		")\r\n" +
 		":cleanup\r\n" +
 		"del \"" + tmpPath + "\" >nul 2>&1\r\n" +
-		"schtasks.exe /delete /tn WinCtlUpgrade /f >nul 2>&1\r\n" +
+		"schtasks.exe /delete /tn " + taskName + " /f >nul 2>&1\r\n" +
 		"echo Upgrade finished %date% %time% >> \"" + logFile + "\"\r\n" +
 		"del \"%~f0\" >nul 2>&1\r\n" // bat deletes itself
 
@@ -159,7 +160,6 @@ func applyUpgrade(tmpPath string) {
 
 	// Use schtasks to run the bat script as an independent SYSTEM task.
 	// This survives the service process being killed (unlike child processes).
-	taskName := "WinCtlUpgrade"
 	// Delete any leftover task from a previous attempt.
 	_ = exec.Command("schtasks.exe", "/delete", "/tn", taskName, "/f").Run()
 	// Create a one-time task that runs immediately as SYSTEM.
@@ -181,7 +181,9 @@ func applyUpgrade(tmpPath string) {
 	cmd2 := exec.Command("schtasks.exe", "/run", "/tn", taskName)
 	if out, err := cmd2.CombinedOutput(); err != nil {
 		slog.Error("upgrade: failed to run scheduled task", "error", err, "output", string(out))
-		_ = exec.Command("schtasks.exe", "/delete", "/tn", taskName, "/f").Run()
+		if delOut, delErr := exec.Command("schtasks.exe", "/delete", "/tn", taskName, "/f").CombinedOutput(); delErr != nil {
+			slog.Error("upgrade: failed to clean up scheduled task", "error", delErr, "output", string(delOut))
+		}
 		_ = os.Remove(batPath)
 		cleanup()
 		return
