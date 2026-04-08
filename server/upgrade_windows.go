@@ -79,31 +79,41 @@ func applyUpgrade(tmpPath string) {
 	// Uses if-errorlevel checks so failures trigger rollback.
 	// Logs output to a file next to the binary for post-mortem.
 	logFile := installedPath + ".upgrade.log"
+	// Use ping for delay (timeout command fails in non-interactive SYSTEM context).
+	// Use sc instead of net for service control (more reliable from SYSTEM).
 	scriptContent := "@echo off\r\n" +
-		"timeout /t 3 /nobreak >nul\r\n" +
+		"echo Upgrade started %date% %time% >> \"" + logFile + "\"\r\n" +
+		"ping -n 4 127.0.0.1 >nul\r\n" +
 		"echo Stopping service... >> \"" + logFile + "\"\r\n" +
-		"net stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"sc.exe stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
-		"  echo WARNING: net stop failed, continuing anyway >> \"" + logFile + "\"\r\n" +
+		"  echo WARNING: sc.exe stop returned error, continuing anyway >> \"" + logFile + "\"\r\n" +
 		")\r\n" +
+		"echo Waiting for service to stop... >> \"" + logFile + "\"\r\n" +
+		"ping -n 6 127.0.0.1 >nul\r\n" +
 		"echo Copying new binary... >> \"" + logFile + "\"\r\n" +
 		"copy /y \"" + tmpPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
 		"  echo ERROR: copy failed, restoring backup >> \"" + logFile + "\"\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
-		"  net start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		"  goto :cleanup\r\n" +
 		")\r\n" +
 		"echo Starting service with new binary... >> \"" + logFile + "\"\r\n" +
-		"net start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"echo Verifying service started... >> \"" + logFile + "\"\r\n" +
+		"ping -n 6 127.0.0.1 >nul\r\n" +
+		"sc.exe query " + ServiceName + " | find \"RUNNING\" >nul 2>&1\r\n" +
 		"if errorlevel 1 (\r\n" +
-		"  echo ERROR: start failed, restoring backup >> \"" + logFile + "\"\r\n" +
+		"  echo ERROR: service not running after start, restoring backup >> \"" + logFile + "\"\r\n" +
+		"  sc.exe stop " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  ping -n 3 127.0.0.1 >nul\r\n" +
 		"  copy /y \"" + backupPath + "\" \"" + installedPath + "\" >> \"" + logFile + "\" 2>&1\r\n" +
-		"  net start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
+		"  sc.exe start " + ServiceName + " >> \"" + logFile + "\" 2>&1\r\n" +
 		")\r\n" +
 		":cleanup\r\n" +
 		"del \"" + tmpPath + "\" >nul 2>&1\r\n" +
-		"echo Upgrade complete >> \"" + logFile + "\"\r\n" +
+		"echo Upgrade complete %date% %time% >> \"" + logFile + "\"\r\n" +
 		"del \"%~f0\" >nul 2>&1\r\n" // bat deletes itself
 
 	batPath := filepath.Join(os.TempDir(), "winctl-upgrade.bat")
