@@ -398,9 +398,13 @@ function applyUpgradeFromModal() {
                 showToast('Upgrade failed: ' + data.error, 'error');
                 return;
             }
-            document.getElementById('modal-progress-text').textContent =
-                'Update v' + data.version + ' downloaded and verified. Service will restart shortly.';
-            showToast('Update downloaded. Service restarting...', 'ok');
+            showToast('Update v' + data.version + ' downloaded. Service restarting...', 'ok');
+            // Close modal after a brief delay, then wait for service to come back.
+            setTimeout(function() {
+                document.getElementById('update-modal').style.display = 'none';
+                document.getElementById('modal-actions').style.display = '';
+                document.getElementById('modal-progress').style.display = 'none';
+            }, 2000);
         })
         .catch(function(err) {
             document.getElementById('modal-progress-text').textContent = 'Error: ' + err.message;
