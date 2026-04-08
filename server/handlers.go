@@ -369,6 +369,16 @@ func (h *handlers) updateApply(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("upgrade: could not extend write deadline, large downloads may timeout", "error", err)
 	}
 
+	// Pre-flight: verify we can reach the service manager and find the service.
+	if errMsg := preflightUpgradeCheck(); errMsg != "" {
+		upgradeInProgress.Store(false)
+		slog.Error("upgrade preflight failed", "error", errMsg)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		writeJSON(w, map[string]string{"error": errMsg})
+		return
+	}
+
 	info := h.updater.Cached()
 	if !info.Available {
 		upgradeInProgress.Store(false)

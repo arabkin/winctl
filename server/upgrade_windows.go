@@ -24,6 +24,35 @@ var ServiceName = "WinCtlSvc"
 
 var upgradeInProgress atomic.Bool
 
+// preflightUpgradeCheck verifies the service manager is reachable and the
+// service exists. Returns empty string on success, error message on failure.
+func preflightUpgradeCheck() string {
+	m, err := mgr.Connect()
+	if err != nil {
+		return "cannot connect to service manager: " + err.Error()
+	}
+	defer m.Disconnect()
+
+	s, err := m.OpenService(ServiceName)
+	if err != nil {
+		return "service " + ServiceName + " not found: " + err.Error()
+	}
+
+	cfg, err := s.Config()
+	s.Close()
+	if err != nil {
+		return "cannot read service config: " + err.Error()
+	}
+
+	installedPath := parseBinaryPath(cfg.BinaryPathName)
+	if _, err := os.Stat(installedPath); err != nil {
+		return "installed binary not found at " + installedPath + ": " + err.Error()
+	}
+
+	slog.Info("upgrade preflight passed", "service", ServiceName, "binary", installedPath)
+	return ""
+}
+
 // applyUpgrade replaces the installed service binary and restarts the service.
 // Must be called in a goroutine — blocks until the restart script is launched.
 func applyUpgrade(tmpPath string) {
