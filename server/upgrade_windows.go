@@ -54,13 +54,8 @@ func preflightUpgradeCheck() string {
 }
 
 // applyUpgrade replaces the installed service binary and restarts the service.
-// Must be called in a goroutine — blocks until the restart script is launched.
+// Must be called in a goroutine. The caller (handler) already holds upgradeInProgress.
 func applyUpgrade(tmpPath string) {
-	if !upgradeInProgress.CompareAndSwap(false, true) {
-		slog.Warn("upgrade: already in progress, ignoring duplicate request")
-		return
-	}
-
 	cleanup := func() {
 		_ = os.Remove(tmpPath)
 		upgradeInProgress.Store(false)
