@@ -67,7 +67,7 @@ select.cfg-input { width: 100px; }
     padding: 0.4rem 0;
 }
 .btn-on:disabled { background: #3a3a4e; color: #666; cursor: default; }
-.btn-reset-defaults { background: #533483; font-size: 0.8rem; }
+.btn-reset-defaults { background: #533483; font-size: 0.8rem; grid-column: 1 / -1; }
 .btn-reset-defaults:hover { background: #6a44a0; }
 .card-global { border-color: #533483; }
 
@@ -82,9 +82,9 @@ select.cfg-input { width: 100px; }
 
 .actions {
     margin-top: 0.75rem;
-    display: flex;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
-    flex-wrap: wrap;
 }
 
 button {
@@ -105,9 +105,9 @@ button:active { transform: scale(0.97); }
 .btn-on:hover:not(:disabled) { background: #3a8a64; }
 .btn-off { background: #6a2d2d; }
 .btn-off:hover { background: #8a3a3a; }
-.btn-reset { background: #533483; width: 100%; }
+.btn-reset { background: #533483; grid-column: 1 / -1; }
 .btn-reset:hover { background: #6a44a0; }
-.btn-reload { background: #1a5276; width: 100%; }
+.btn-reload { background: #1a5276; grid-column: 1 / -1; }
 .btn-reload:hover { background: #21618c; }
 .btn-logout { padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #6a2d2d; border-radius: 12px; }
 .btn-logout:hover { background: #8a3a3a; }
@@ -122,7 +122,7 @@ button:active { transform: scale(0.97); }
 .toast-ok { background: #2d6a4f; color: #b7e4c7; }
 
 .card-upgrade { border-color: #b5830a; }
-.btn-upgrade { background: #b5830a; width: 100%; }
+.btn-upgrade { background: #b5830a; grid-column: 1 / -1; }
 .btn-upgrade:hover:not(:disabled) { background: #d4a017; }
 .btn-upgrade:disabled { background: #3a3a4e; color: #666; cursor: default; }
 .upgrade-body {
